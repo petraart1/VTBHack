@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: authService
+
+  datasource:
+    url: jdbc:postgresql://${AUTH_DB_CONTAINER_NAME}:${DB_PORT}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: 86400000
+
+logging:
+  level:
+    com:
+      messenger:
+        controller: INFO
+        service: DEBUG
+    org:
+      springframework: WARN
+      liquibase: INFO
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
