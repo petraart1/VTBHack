@@ -1,0 +1,263 @@
+services:
+  auth-db:
+    image: 'postgres:16-alpine'
+
+    container_name: auth-db
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data:rw
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  chat-db:
+    image: 'postgres:16-alpine'
+
+    container_name: chat-db
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - chat_db_data:/var/lib/postgresql/data:rw
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  message-db:
+    image: 'postgres:16-alpine'
+
+    container_name: message-db
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5434:5432"
+
+    volumes:
+      - message_db_data:/var/lib/postgresql/data:rw
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  user-db:
+    image: 'postgres:16-alpine'
+
+    container_name: user-db
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5435:5432"
+
+    volumes:
+      - user_db_data:/var/lib/postgresql/data:rw
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  auth:
+    container_name: auth
+
+    build:
+      context: ./authService
+      dockerfile: Dockerfile
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      AUTH_DB_CONTAINER_NAME: ${AUTH_DB_CONTAINER_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      auth-db:
+        condition: service_healthy
+
+  chat:
+    container_name: chat
+
+    build:
+      context: ./chatService
+      dockerfile: Dockerfile
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      CHAT_DB_CONTAINER_NAME: ${CHAT_DB_CONTAINER_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+
+    ports:
+      - "8081:8080"
+
+    depends_on:
+      chat-db:
+        condition: service_healthy
+
+  message:
+    container_name: message
+
+    build:
+      context: ./messageService
+      dockerfile: Dockerfile
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      MESSAGE_DB_CONTAINER_NAME: ${MESSAGE_DB_CONTAINER_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+
+    ports:
+      - "8082:8080"
+
+    depends_on:
+      message-db:
+        condition: service_healthy
+
+  user:
+    container_name: user
+
+    build:
+      context: ./userService
+      dockerfile: Dockerfile
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      USER_DB_CONTAINER_NAME: ${USER_DB_CONTAINER_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+
+    ports:
+      - "8083:8080"
+
+    depends_on:
+      user-db:
+        condition: service_healthy
+
+  redis:
+    container_name: redis
+
+    build:
+      context: ./_infrastructure/redis
+      dockerfile: Dockerfile
+
+  kafka:
+    container_name: kafka
+
+    image: apache/kafka
+
+
+  nginx:
+    container_name: nginx
+
+    build:
+      context: _infrastructure/nginx
+      dockerfile: Dockerfile
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      - auth
+      - chat
+      - message
+      - user
+
+  prometheus:
+    container_name: prometheus
+    build:
+      context: _infrastructure/prometheus
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring_net
+
+    depends_on:
+      - auth
+      - chat
+      - message
+      - user
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    command:
+      - '--path.rootfs=/host'
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro,rslave'
+    ports:
+      - "9100:9100"
+
+  grafana:
+    container_name: grafana
+
+    build:
+      context: _infrastructure/grafana
+      dockerfile: Dockerfile
+
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring_net
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana:/var/lib/grafana
+
+volumes:
+  auth_db_data:
+  chat_db_data:
+  message_db_data:
+  user_db_data:
+  grafana:
+
+networks:
+  monitoring_net:
+    driver: bridge
