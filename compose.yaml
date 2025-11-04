@@ -99,7 +99,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DB_PORT: ${DB_PORT}
-      BANK_DB_CONTAINER_NAME: ${CHAT_DB_CONTAINER_NAME}
+      BANK_DB_CONTAINER_NAME: ${BANK_DB_CONTAINER_NAME}
       JWT_SECRET: ${JWT_SECRET}
 
     ports:
@@ -121,7 +121,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DB_PORT: ${DB_PORT}
-      RADAR_DB_CONTAINER_NAME: ${MESSAGE_DB_CONTAINER_NAME}
+      RADAR_DB_CONTAINER_NAME: ${RADAR_DB_CONTAINER_NAME}
       JWT_SECRET: ${JWT_SECRET}
 
     ports:
@@ -130,6 +130,14 @@ services:
     depends_on:
       radar-db:
         condition: service_healthy
+
+  #redis:
+   # container_name: redis
+
+    #build:
+     # context: _infrastructure/redis
+      #dockerfile: Dockerfile
+
 
   nginx:
     container_name: nginx
@@ -143,9 +151,25 @@ services:
 
     depends_on:
       - auth
-      - chat
-      - message
-      - user
+      - bank
+      - radar
+
+  prometheus:
+    container_name: prometheus
+    build:
+      context: _infrastructure/prometheus
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring_net
+
+    depends_on:
+      - auth
+      - bank
+      - radar
 
 volumes:
   auth_db_data:

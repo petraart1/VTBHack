@@ -3,10 +3,10 @@
 SERVICES = authService bankService radarService
 
 up:
-	docker-compose --env-file=.env up --build
+	docker compose --env-file=.env up --build
 
 down:
-	docker-compose down
+	docker compose down
 
 delete:
 	docker compose down --volumes
