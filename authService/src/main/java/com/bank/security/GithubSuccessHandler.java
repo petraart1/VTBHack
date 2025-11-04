@@ -1,58 +1,46 @@
-package com.bank.controller;
+package com.bank.security;
 
-import com.bank.entity.dto.*;
 import com.bank.entity.model.Role;
 import com.bank.entity.model.User;
 import com.bank.repository.UserRepository;
 import com.bank.security.JwtService;
-import com.bank.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-@RestController
-@RequestMapping("/auth")
+@Component
 @RequiredArgsConstructor
-public class AuthController {
+public class GithubSuccessHandler implements AuthenticationSuccessHandler {
 
-    private final AuthService authService;
     private final UserRepository userRepository;
     private final JwtService jwtService;
 
-    // --- Твои существующие ручки ---
-    @PostMapping("/register")
-    public ResponseEntity<Response_RegisterDTO> register(@RequestBody Request_RegisterDTO dto) {
-        return ResponseEntity.ok(authService.register(dto));
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<Response_LoginDTO> login(@RequestBody Request_LoginDTO dto) {
-        return ResponseEntity.ok(authService.login(dto));
-    }
-
-    @GetMapping("/oauth2/authorize/{provider}")
-    public void oauth2Authorize(@PathVariable String provider, HttpServletResponse response) throws IOException {
-        response.sendRedirect("/oauth2/authorization/" + provider);
-    }
-    @GetMapping("/oauth2/success")
-    public ResponseEntity<Response_LoginDTO> oauth2Success(Authentication authentication) {
-
+    @Override
+    @Transactional
+    public void onAuthenticationSuccess(HttpServletRequest request,
+                                        HttpServletResponse response,
+                                        Authentication authentication) {
         OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
 
+        // email может быть скрыт; берём либо email, либо делаем fallback
         String email = Optional.ofNullable((String) oAuth2User.getAttributes().get("email"))
                 .orElseGet(() -> oAuth2User.getAttribute("login") + "@github.local");
 
         String name = Optional.ofNullable((String) oAuth2User.getAttributes().get("name"))
                 .orElse("GitHub User");
 
+        // найти/создать локального пользователя
         User user = userRepository.findByEmail(email).orElseGet(() -> {
             User u = new User();
             u.setEmail(email);
@@ -64,7 +52,16 @@ public class AuthController {
             return userRepository.save(u);
         });
 
+        // выдать JWT с ролью
         String token = jwtService.generateAccessToken(user.getEmail(), List.of(user.getRole().name()));
-        return ResponseEntity.ok(new Response_LoginDTO(token));
+
+        // вернуть JSON (или сделай редирект на фронт)
+        try {
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter().write("""
+                {"token":"%s"}
+                """.formatted(token));
+        } catch (Exception ignored) {}
     }
 }
