@@ -7,6 +7,24 @@ spring:
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    # HikariCP Connection Pool оптимизация для высокой нагрузки
+    hikari:
+      # Основные настройки пула
+      maximum-pool-size: 20          # Максимум 20 соединений (увеличено для высокой нагрузки)
+      minimum-idle: 5               # Минимум 5 простаивающих соединений
+      idle-timeout: 300000          # 5 минут до закрытия простаивающего соединения
+      max-lifetime: 1200000         # 20 минут максимальное время жизни соединения
+      connection-timeout: 20000     # 20 секунд таймаут на получение соединения
+
+      # Настройки валидации соединений
+      validation-timeout: 5000      # 5 секунд на валидацию
+      leak-detection-threshold: 60000  # 60 секунд для обнаружения утечек
+      connection-test-query: SELECT 1  # Простой тест соединения
+
+      # Оптимизации производительности
+      pool-name: BankServicePool    # Имя пула для мониторинга
+      allow-pool-suspension: false  # Запретить приостановку пула
+      auto-commit: true             # Автоматический commit (по умолчанию)
 
   redis:
     host: ${REDIS_HOST:localhost}
@@ -14,9 +32,13 @@ spring:
     timeout: 2000ms
     lettuce:
       pool:
-        max-active: 8
-        max-idle: 8
-        min-idle: 0
+        # Redis connection pool оптимизация
+        max-active: 20           # Максимум 20 активных соединений
+        max-idle: 10             # Максимум 10 простаивающих соединений
+        min-idle: 5              # Минимум 5 простаивающих соединений
+        max-wait: 3000ms         # Максимум 3 секунды ожидания соединения
+        time-between-eviction-runs: 60000ms  # Проверка каждые 60 секунд
+      shutdown-timeout: 100ms
 
   jpa:
     hibernate:
@@ -111,12 +133,14 @@ resilience4j:
           - java.net.ConnectException
           - java.net.SocketTimeoutException
           - org.springframework.web.client.ResourceAccessException
+          - reactor.core.Exceptions$ReactiveException
         ignoreExceptions:
           - com.bank.exception.BankApiException
-  
+
   circuitbreaker:
     instances:
       bankApi:
+        # Основные настройки
         registerHealthIndicator: true
         slidingWindowSize: 10
         minimumNumberOfCalls: 5
@@ -124,7 +148,46 @@ resilience4j:
         automaticTransitionFromOpenToHalfOpenEnabled: true
         waitDurationInOpenState: 30s
         failureRateThreshold: 50
+
+        # Дополнительные настройки
         eventConsumerBufferSize: 10
         recordExceptions:
           - com.bank.exception.BankApiException
           - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - reactor.core.Exceptions$ReactiveException
+        ignoreExceptions:
+          - java.lang.IllegalArgumentException
+
+  # Метрики для мониторинга
+  metrics:
+    enable:
+      circuitbreaker: true
+      retry: true
+    tags:
+      application: bankService
+
+# Actuator endpoints для мониторинга
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,resilience4j,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true  # Включает liveness и readiness probes для Kubernetes
+    metrics:
+      enabled: true
+    resilience4j:
+      enabled: true
+    loggers:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    # Настройки для кастомных health checks
+    custom:
+      enabled: true

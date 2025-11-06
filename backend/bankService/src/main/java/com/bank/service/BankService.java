@@ -8,6 +8,8 @@ import com.bank.model.BankAccount;
 import com.bank.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,19 +23,20 @@ import java.util.stream.Collectors;
  * Соответствует требованиям SOLID и документации проекта
  */
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class BankService {
+
+    private static final Logger log = LoggerFactory.getLogger(BankService.class);
 
     private final AccountRepository accountRepository;
     private final AccountMapper accountMapper;
 
     /**
      * Получение всех активных счетов пользователя
-     * Кеширование: TTL 5 минут
+     * Кеширование: TTL 5 минут, ключ: accounts:user:{userId}
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "accounts", key = "#userId")
+    @Cacheable(value = "accounts", key = "'user:' + #userId")
     public List<AccountDto> getAccounts(UUID userId) {
         log.info("Fetching accounts for user: {}", userId);
 
@@ -51,10 +54,10 @@ public class BankService {
 
     /**
      * Получение счетов пользователя по конкретному банку
-     * Кеширование: TTL 5 минут
+     * Кеширование: TTL 5 минут, ключ: accounts:user_bank:{userId}:{bankId}
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "accounts", key = "#userId + '_' + #bankId")
+    @Cacheable(value = "accounts", key = "'user_bank:' + #userId + ':' + #bankId")
     public List<AccountDto> getAccountsByBank(UUID userId, String bankId) {
         log.info("Fetching accounts for user: {}, bank: {}", userId, bankId);
 

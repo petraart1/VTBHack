@@ -12,10 +12,13 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,13 +36,15 @@ import java.util.UUID;
  * - Логирование всех запросов
  */
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class BankApiClient {
+
+    private static final Logger log = LoggerFactory.getLogger(BankApiClient.class);
 
     private final BankProperties bankProperties;
     private final TokenService tokenService;
     private final RestClient bankRestClient;
+    private final WebClient bankWebClient;
     private final ConsentService consentService;
 
     /**
@@ -49,8 +54,277 @@ public class BankApiClient {
      * @param credentials Учетные данные банка
      * @return Список счетов
      */
-    @Retry(name = "bankApi", fallbackMethod = "getAccountsFallback")
-    @CircuitBreaker(name = "bankApi", fallbackMethod = "getAccountsFallback")
+
+    /**
+     * Реактивная версия получения списка счетов
+     */
+    @CircuitBreaker(name = "bankApi", fallbackMethod = "getAccountsReactiveFallback")
+    public reactor.core.publisher.Mono<ExternalAccountResponseDto> getAccountsReactive(UUID userId, BankCredentials credentials) {
+        BankProperties.BankConfig bankConfig = getBankConfig(credentials.bankId());
+        String accessToken = tokenService.getAccessToken(userId, credentials);
+
+        // Используем clientId из credentials (обязательно в формате teamXXX-Y)
+        String clientId = credentials.clientId();
+        if (clientId == null || clientId.isBlank()) {
+            throw new IllegalArgumentException("clientId is required and must be in format teamXXX-Y");
+        }
+
+        // Получаем consent_id для межбанкового запроса
+        String consentId = consentService.getConsentId(userId, credentials, clientId);
+
+        // URL с client_id query параметром для межбанкового запроса
+        String url = bankConfig.getBaseUrl() + bankConfig.getAccountsEndpoint() + "?client_id=" + clientId;
+
+        // Извлекаем teamId для логирования и заголовков
+        String teamId = extractTeamIdFromClientId(clientId);
+        log.info("fetching accounts reactively from bank={} for user={}, client_id={}, team_id={}, consent_id={}",
+                credentials.bankId(), userId, "***", teamId, consentId);
+
+        return bankWebClient.get()
+                .uri(url)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-Request-ID", UUID.randomUUID().toString())
+                .header("X-Requesting-Bank", teamId)  // Используем teamXXX, а не username
+                .header("X-Consent-Id", consentId)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        clientResponse -> {
+                            log.error("External API returned error status: {} for URL: {}", clientResponse.statusCode(), url);
+                            return clientResponse.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        log.error("Response body: {}", errorBody);
+                                        handleBankApiError(clientResponse.statusCode().value(),
+                                                credentials.bankId(), "getAccountsReactive");
+                                        return reactor.core.publisher.Mono.error(
+                                                new BankApiException(
+                                                        "Failed to fetch accounts: " + clientResponse.statusCode(),
+                                                        clientResponse.statusCode().value(),
+                                                        credentials.bankId()
+                                                )
+                                        );
+                                    });
+                        })
+                .bodyToMono(ExternalAccountResponseDto.class)
+                .doOnNext(response -> {
+                    log.info("External API response received: accounts count={}, full data={}",
+                            response.accounts() != null ? response.accounts().size() : "null", response);
+
+                    // Проверяем, что accounts не null
+                    if (response.accounts() == null || response.accounts().isEmpty()) {
+                        log.warn("accounts list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                        throw new BankApiException(
+                                "Empty accounts response from bank",
+                                502,
+                                credentials.bankId()
+                        );
+                    }
+
+                    log.info("successfully fetched {} accounts from bank={}",
+                            response.accounts().size(), credentials.bankId());
+                })
+                .onErrorResume(throwable -> {
+                    log.error("failed to fetch accounts reactively from bank={}: {}", credentials.bankId(), throwable.getMessage());
+                    return reactor.core.publisher.Mono.error(throwable);
+                });
+    }
+
+    /**
+     * Fallback для реактивного getAccounts
+     */
+    public reactor.core.publisher.Mono<ExternalAccountResponseDto> getAccountsReactiveFallback(
+            UUID userId, BankCredentials credentials, Throwable throwable) {
+
+        log.error("CIRCUIT BREAKER: getAccountsReactive failed for user={}, bank={}, error={}. Circuit breaker activated!",
+                userId, credentials.bankId(), throwable.getMessage());
+
+        // Возвращаем пустой ответ - Circuit Breaker активен
+        return reactor.core.publisher.Mono.just(
+                new ExternalAccountResponseDto(
+                        new ExternalAccountResponseDto.Data(List.of()),
+                        null,
+                        null
+                )
+        );
+    }
+
+    /**
+     * Fallback для реактивного getTransactions
+     */
+    public reactor.core.publisher.Mono<ExternalTransactionResponseDto> getTransactionsReactiveFallback(
+            UUID userId, BankCredentials credentials, UUID accountId, Throwable throwable) {
+
+        log.error("CIRCUIT BREAKER: getTransactionsReactive failed for user={}, bank={}, account={}, error={}. Circuit breaker activated!",
+                userId, credentials.bankId(), accountId, throwable.getMessage());
+
+        // Возвращаем пустой ответ
+        return reactor.core.publisher.Mono.just(
+                new ExternalTransactionResponseDto(
+                        new ExternalTransactionResponseDto.Data(List.of()),
+                        null, null
+                )
+        );
+    }
+
+    /**
+     * Fallback для реактивного getBalances
+     */
+    public reactor.core.publisher.Mono<ExternalBalanceResponseDto> getBalancesReactiveFallback(
+            UUID userId, BankCredentials credentials, UUID accountId, Throwable throwable) {
+
+        log.error("CIRCUIT BREAKER: getBalancesReactive failed for user={}, bank={}, account={}, error={}. Circuit breaker activated!",
+                userId, credentials.bankId(), accountId, throwable.getMessage());
+
+        // Возвращаем пустой ответ
+        return reactor.core.publisher.Mono.just(
+                new ExternalBalanceResponseDto(
+                        new ExternalBalanceResponseDto.Data(List.of()),
+                        null, null
+                )
+        );
+    }
+
+    /**
+     * Реактивная версия получения транзакций
+     */
+    @CircuitBreaker(name = "bankApi", fallbackMethod = "getTransactionsReactiveFallback")
+    public reactor.core.publisher.Mono<ExternalTransactionResponseDto> getTransactionsReactive(
+            UUID userId, BankCredentials credentials, UUID accountId) {
+
+        BankProperties.BankConfig bankConfig = getBankConfig(credentials.bankId());
+        String accessToken = tokenService.getAccessToken(userId, credentials);
+
+        String clientId = credentials.clientId();
+        if (clientId == null || clientId.isBlank()) {
+            throw new IllegalArgumentException("clientId is required and must be in format teamXXX-Y");
+        }
+
+        String consentId = consentService.getConsentId(userId, credentials, clientId);
+
+        String url = bankConfig.getBaseUrl() + bankConfig.getTransactionsEndpoint()
+                .replace("{accountId}", accountId.toString()) + "?client_id=" + clientId;
+
+        String teamId = extractTeamIdFromClientId(clientId);
+        log.info("fetching transactions reactively from bank={} for user={}, account={}, client_id={}, team_id={}, consent_id={}",
+                credentials.bankId(), userId, accountId, "***", teamId, consentId);
+
+        return bankWebClient.get()
+                .uri(url)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-Request-ID", UUID.randomUUID().toString())
+                .header("X-Requesting-Bank", teamId)
+                .header("X-Consent-Id", consentId)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        clientResponse -> {
+                            log.error("External API returned error status: {} for URL: {}", clientResponse.statusCode(), url);
+                            return clientResponse.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        log.error("Response body: {}", errorBody);
+                                        handleBankApiError(clientResponse.statusCode().value(),
+                                                credentials.bankId(), "getTransactionsReactive");
+                                        return reactor.core.publisher.Mono.error(
+                                                new BankApiException(
+                                                        "Failed to fetch transactions: " + clientResponse.statusCode(),
+                                                        clientResponse.statusCode().value(),
+                                                        credentials.bankId()
+                                                )
+                                        );
+                                    });
+                        })
+                .bodyToMono(ExternalTransactionResponseDto.class)
+                .doOnNext(response -> {
+                    log.info("External API response received: transactions count={}, full data={}",
+                            response.transactions() != null ? response.transactions().size() : "null", response);
+
+                    if (response.transactions() == null || response.transactions().isEmpty()) {
+                        log.warn("transactions list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                        throw new BankApiException(
+                                "Empty transactions response from bank",
+                                502,
+                                credentials.bankId()
+                        );
+                    }
+
+                    log.info("successfully fetched {} transactions from bank={}",
+                            response.transactions().size(), credentials.bankId());
+                })
+                .onErrorResume(throwable -> {
+                    log.error("failed to fetch transactions reactively from bank={}: {}", credentials.bankId(), throwable.getMessage());
+                    return reactor.core.publisher.Mono.error(throwable);
+                });
+    }
+
+    /**
+     * Реактивная версия получения балансов
+     */
+    @CircuitBreaker(name = "bankApi", fallbackMethod = "getBalancesReactiveFallback")
+    public reactor.core.publisher.Mono<ExternalBalanceResponseDto> getBalancesReactive(
+            UUID userId, BankCredentials credentials, UUID accountId) {
+
+        BankProperties.BankConfig bankConfig = getBankConfig(credentials.bankId());
+        String accessToken = tokenService.getAccessToken(userId, credentials);
+
+        String clientId = credentials.clientId();
+        if (clientId == null || clientId.isBlank()) {
+            throw new IllegalArgumentException("clientId is required and must be in format teamXXX-Y");
+        }
+
+        String consentId = consentService.getConsentId(userId, credentials, clientId);
+
+        String url = bankConfig.getBaseUrl() + bankConfig.getBalancesEndpoint()
+                .replace("{accountId}", accountId.toString()) + "?client_id=" + clientId;
+
+        String teamId = extractTeamIdFromClientId(clientId);
+        log.info("fetching balances reactively from bank={} for user={}, account={}, client_id={}, team_id={}, consent_id={}",
+                credentials.bankId(), userId, accountId, "***", teamId, consentId);
+
+        return bankWebClient.get()
+                .uri(url)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-Request-ID", UUID.randomUUID().toString())
+                .header("X-Requesting-Bank", teamId)
+                .header("X-Consent-Id", consentId)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        clientResponse -> {
+                            log.error("External API returned error status: {} for URL: {}", clientResponse.statusCode(), url);
+                            return clientResponse.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        log.error("Response body: {}", errorBody);
+                                        handleBankApiError(clientResponse.statusCode().value(),
+                                                credentials.bankId(), "getBalancesReactive");
+                                        return reactor.core.publisher.Mono.error(
+                                                new BankApiException(
+                                                        "Failed to fetch balances: " + clientResponse.statusCode(),
+                                                        clientResponse.statusCode().value(),
+                                                        credentials.bankId()
+                                                )
+                                        );
+                                    });
+                        })
+                .bodyToMono(ExternalBalanceResponseDto.class)
+                .doOnNext(response -> {
+                    log.info("External API response received: balances count={}, full data={}",
+                            response.balances() != null ? response.balances().size() : "null", response);
+
+                    if (response.balances() == null || response.balances().isEmpty()) {
+                        log.warn("balances list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                        throw new BankApiException(
+                                "Empty balances response from bank",
+                                502,
+                                credentials.bankId()
+                        );
+                    }
+
+                    log.info("successfully fetched {} balances from bank={}",
+                            response.balances().size(), credentials.bankId());
+                })
+                .onErrorResume(throwable -> {
+                    log.error("failed to fetch balances reactively from bank={}: {}", credentials.bankId(), throwable.getMessage());
+                    return reactor.core.publisher.Mono.error(throwable);
+                });
+    }
+
     public ExternalAccountResponseDto getAccounts(UUID userId, BankCredentials credentials) {
         return getAccounts(userId, credentials, null);
     }

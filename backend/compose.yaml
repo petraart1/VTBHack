@@ -110,6 +110,8 @@ services:
     depends_on:
       bank-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   radar:
     container_name: radar

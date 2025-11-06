@@ -13,6 +13,7 @@ import com.bank.dto.response.ConsentResponseDto;
 import com.bank.service.BankSyncService;
 import com.bank.service.ConsentService;
 import com.bank.service.TokenService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,6 +24,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import com.bank.util.AuthUtil;
 import org.springframework.security.core.Authentication;
@@ -32,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import reactor.core.publisher.Mono;
 
 /**
  * Контроллер для управления банками и синхронизацией данных
@@ -40,15 +44,17 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/bank/banks")
 @RequiredArgsConstructor
-@Slf4j
 @Tag(name = "Banks", description = "API для управления банками и синхронизацией данных")
 @SecurityRequirement(name = "bearerAuth")
 public class BankController {
+
+    private static final Logger log = LoggerFactory.getLogger(BankController.class);
 
     private final BankProperties bankProperties;
     private final BankSyncService bankSyncService;
     private final ConsentService consentService;
     private final TokenService tokenService;
+    private final JdbcTemplate jdbcTemplate;
 
     /**
      * Получение списка доступных банков
@@ -234,6 +240,107 @@ public class BankController {
                 result.balancesSynced, result.durationMs);
         
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{bankId}/sync-reactive")
+    public reactor.core.publisher.Mono<ResponseEntity<SyncResultDto>> syncBankReactive(
+            @Parameter(description = "ID банка (vbank, abank, sbank)", required = true)
+            @PathVariable String bankId,
+            @Parameter(description = "Данные для синхронизации (упрощенная версия без consentId)")
+            @Valid @RequestBody BankSyncRequestDto request,
+            @Parameter(hidden = true) Authentication authentication) {
+
+        log.info("POST /api/v1/bank/banks/{}/sync-reactive - reactive syncing bank", bankId);
+
+        UUID userId = extractUserIdFromJwt(authentication);
+
+        // Проверяем, что банк существует
+        if (!bankProperties.getConfigs().containsKey(bankId)) {
+            return reactor.core.publisher.Mono.error(new BankNotFoundException(bankId));
+        }
+
+        // clientId обязателен для sync
+        if (request.clientId() == null || request.clientId().isBlank()) {
+            return reactor.core.publisher.Mono.error(new InvalidClientIdException("clientId is required for sync operation"));
+        }
+
+        BankCredentials credentials = new BankCredentials(
+                userId,
+                bankId,
+                request.username(),
+                request.password(),
+                request.clientId()
+        );
+
+        return bankSyncService.syncAllReactive(userId, credentials)
+                .map(result -> {
+                    SyncResultDto response = new SyncResultDto(
+                            result.success,
+                            result.accountsSynced,
+                            result.transactionsSynced,
+                            result.balancesSynced,
+                            result.durationMs,
+                            result.errorMessage
+                    );
+
+                    log.info("reactive bank sync completed: bank={}, accounts={}, transactions={}, balances={}, duration={}ms",
+                            bankId, result.accountsSynced, result.transactionsSynced, result.balancesSynced, result.durationMs);
+
+                    return ResponseEntity.ok(response);
+                })
+                .onErrorResume(throwable -> {
+                    log.error("reactive sync failed for bank={}: {}", bankId, throwable.getMessage());
+                    return reactor.core.publisher.Mono.just(ResponseEntity.internalServerError().build());
+                });
+    }
+
+    @GetMapping("/circuit-breaker/status")
+    public ResponseEntity<Map<String, Object>> getCircuitBreakerStatus() {
+        log.info("GET /api/v1/bank/banks/circuit-breaker/status - checking circuit breaker status");
+
+        // В Spring Boot 3 Circuit Breaker metrics доступны через actuator
+        // Этот endpoint возвращает базовую информацию
+        Map<String, Object> status = Map.of(
+                "circuitBreaker", "bankApi",
+                "status", "configured",
+                "configuration", Map.of(
+                        "failureRateThreshold", "50%",
+                        "waitDurationInOpenState", "30s",
+                        "slidingWindowSize", "10",
+                        "minimumNumberOfCalls", "5"
+                ),
+                "metricsEndpoint", "/actuator/metrics/resilience4j.circuitbreaker.calls",
+                "healthEndpoint", "/actuator/health"
+        );
+
+        return ResponseEntity.ok(status);
+    }
+
+    @GetMapping("/connection-pool/status")
+    public ResponseEntity<Map<String, Object>> getConnectionPoolStatus() {
+        log.info("GET /api/v1/bank/banks/connection-pool/status - checking connection pool status");
+
+        Map<String, Object> status = Map.of(
+                "databasePool", Map.of(
+                        "type", "HikariCP",
+                        "maxPoolSize", 20,
+                        "minIdle", 5,
+                        "idleTimeout", "5 minutes",
+                        "maxLifetime", "20 minutes",
+                        "connectionTimeout", "20 seconds"
+                ),
+                "redisPool", Map.of(
+                        "type", "Lettuce",
+                        "maxActive", 20,
+                        "maxIdle", 10,
+                        "minIdle", 5,
+                        "maxWait", "3 seconds"
+                ),
+                "metricsEndpoint", "/actuator/metrics/hikaricp.connections.active",
+                "healthEndpoint", "/actuator/health"
+        );
+
+        return ResponseEntity.ok(status);
     }
 
     /**

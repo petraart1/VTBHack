@@ -10,9 +10,12 @@ import com.bank.model.AccountBalance;
 import com.bank.model.AccountTransaction;
 import com.bank.model.BankAccount;
 import com.bank.model.SyncLog;
+import com.bank.repository.AccountRepository;
 import com.bank.repository.SyncLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,23 +35,216 @@ import java.util.UUID;
  * - Логирование всех операций в sync_logs
  */
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class BankSyncService {
+
+    private static final Logger log = LoggerFactory.getLogger(BankSyncService.class);
 
     private final BankApiClient bankApiClient;
     private final BankService bankService;
     private final TransactionService transactionService;
     private final BalanceService balanceService;
+    private final AccountRepository accountRepository;
     private final SyncLogRepository syncLogRepository;
+
+    /**
+     * Реактивная версия полной синхронизации: счета + транзакции + балансы
+     * Все операции выполняются параллельно для максимальной производительности
+     */
+    @Transactional
+    @CacheEvict(value = "accounts", key = "'user:' + #userId")
+    public reactor.core.publisher.Mono<SyncResult> syncAllReactive(UUID userId, BankCredentials credentials) {
+        log.info("starting reactive full sync for user={}, bank={}", userId, credentials.bankId());
+
+        long startTime = System.currentTimeMillis();
+
+        // Получаем счета реактивно
+        return bankApiClient.getAccountsReactive(userId, credentials)
+                .flatMap(accountsResponse -> {
+                    // После получения счетов, синхронизируем их и получаем список accountIds
+                    int accountsSynced = syncAccountsFromResponse(userId, credentials.bankId(), accountsResponse);
+
+                    if (accountsSynced == 0) {
+                        log.warn("No accounts found for user={}, bank={}, skipping transactions and balances",
+                                userId, credentials.bankId());
+                        return reactor.core.publisher.Mono.just(
+                                new SyncResult(true, accountsSynced, 0, 0,
+                                        System.currentTimeMillis() - startTime, null)
+                        );
+                    }
+
+                    // Получаем список счетов для параллельной обработки транзакций и балансов
+                    List<UUID> accountIds = accountRepository.findActiveAccountsByUserAndBank(userId, credentials.bankId())
+                            .stream()
+                            .map(BankAccount::getId)
+                            .toList();
+
+                    if (accountIds.isEmpty()) {
+                        return reactor.core.publisher.Mono.just(
+                                new SyncResult(true, accountsSynced, 0, 0,
+                                        System.currentTimeMillis() - startTime, null)
+                        );
+                    }
+
+                    // Создаем Flux из accountIds и обрабатываем параллельно
+                    reactor.core.publisher.Flux<SyncData> syncFlux = reactor.core.publisher.Flux.fromIterable(accountIds)
+                            .flatMap(accountId -> {
+                                reactor.core.publisher.Mono<ExternalTransactionResponseDto> transactionsMono =
+                                        bankApiClient.getTransactionsReactive(userId, credentials, accountId)
+                                                .onErrorResume(throwable -> {
+                                                    log.warn("Failed to get transactions for account {}: {}", accountId, throwable.getMessage());
+                                                    return reactor.core.publisher.Mono.just(
+                                                            new ExternalTransactionResponseDto(
+                                                                    new ExternalTransactionResponseDto.Data(List.of()),
+                                                                    null, null
+                                                            )
+                                                    );
+                                                });
+
+                                reactor.core.publisher.Mono<ExternalBalanceResponseDto> balancesMono =
+                                        bankApiClient.getBalancesReactive(userId, credentials, accountId)
+                                                .onErrorResume(throwable -> {
+                                                    log.warn("Failed to get balances for account {}: {}", accountId, throwable.getMessage());
+                                                    return reactor.core.publisher.Mono.just(
+                                                            new ExternalBalanceResponseDto(
+                                                                    new ExternalBalanceResponseDto.Data(List.of()),
+                                                                    null, null
+                                                            )
+                                                    );
+                                                });
+
+                                return reactor.core.publisher.Mono.zip(transactionsMono, balancesMono)
+                                        .map(tuple -> new SyncData(accountId, tuple.getT1(), tuple.getT2()));
+                            });
+
+                    // Собираем все результаты и сохраняем
+                    return syncFlux.collectList()
+                            .map(syncDataList -> {
+                                int totalTransactions = 0;
+                                int totalBalances = 0;
+
+                                for (SyncData data : syncDataList) {
+                                    totalTransactions += syncTransactionsFromResponse(data.accountId(), data.transactions());
+                                    totalBalances += syncBalancesFromResponse(data.accountId(), data.balances());
+                                }
+
+                                long duration = System.currentTimeMillis() - startTime;
+                                SyncResult result = new SyncResult(true, accountsSynced, totalTransactions, totalBalances, duration, null);
+
+                                logSyncOperation(userId, null, "FULL_SYNC_REACTIVE", "SUCCESS",
+                                        String.format("Synced: %d accounts, %d transactions, %d balances",
+                                                accountsSynced, totalTransactions, totalBalances),
+                                        accountsSynced + totalTransactions + totalBalances, duration);
+
+                                log.info("reactive full sync completed successfully for user={}, bank={}, duration={}ms",
+                                        userId, credentials.bankId(), duration);
+
+                                return result;
+                            });
+                })
+                .onErrorResume(throwable -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    SyncResult result = new SyncResult(false, 0, 0, 0, duration, throwable.getMessage());
+
+                    logSyncOperation(userId, null, "FULL_SYNC_REACTIVE", "FAILED",
+                            "Error: " + throwable.getMessage(), 0, duration);
+
+                    log.error("reactive full sync failed for user={}, bank={}: {}",
+                            userId, credentials.bankId(), throwable.getMessage(), throwable);
+
+                    return reactor.core.publisher.Mono.just(result);
+                });
+    }
+
+    /**
+     * Класс для хранения данных синхронизации одного счета
+     */
+    private static class SyncData {
+        private final UUID accountId;
+        private final ExternalTransactionResponseDto transactions;
+        private final ExternalBalanceResponseDto balances;
+
+        public SyncData(UUID accountId, ExternalTransactionResponseDto transactions, ExternalBalanceResponseDto balances) {
+            this.accountId = accountId;
+            this.transactions = transactions;
+            this.balances = balances;
+        }
+
+        public UUID accountId() { return accountId; }
+        public ExternalTransactionResponseDto transactions() { return transactions; }
+        public ExternalBalanceResponseDto balances() { return balances; }
+    }
+
+    /**
+     * Синхронизация счетов из реактивного ответа
+     */
+    private int syncAccountsFromResponse(UUID userId, String bankId, ExternalAccountResponseDto response) {
+        if (response.accounts() == null || response.accounts().isEmpty()) {
+            return 0;
+        }
+
+        int savedCount = 0;
+        for (ExternalAccountResponseDto.ExternalAccountDto externalAccount : response.accounts()) {
+            try {
+                BankAccount account = mapToEntity(userId, bankId, externalAccount);
+                bankService.saveAccount(account);
+                savedCount++;
+            } catch (Exception e) {
+                log.error("Failed to save account {}: {}", externalAccount.accountId(), e.getMessage(), e);
+            }
+        }
+        return savedCount;
+    }
+
+    /**
+     * Синхронизация транзакций из реактивного ответа
+     */
+    private int syncTransactionsFromResponse(UUID accountId, ExternalTransactionResponseDto response) {
+        if (response.transactions() == null || response.transactions().isEmpty()) {
+            return 0;
+        }
+
+        int savedCount = 0;
+        for (ExternalTransactionResponseDto.ExternalTransactionDto external : response.transactions()) {
+            try {
+                AccountTransaction transaction = mapToEntity(accountId, external);
+                transactionService.saveTransaction(transaction);
+                savedCount++;
+            } catch (Exception e) {
+                log.error("Failed to save transaction: {}", e.getMessage(), e);
+            }
+        }
+        return savedCount;
+    }
+
+    /**
+     * Синхронизация балансов из реактивного ответа
+     */
+    private int syncBalancesFromResponse(UUID accountId, ExternalBalanceResponseDto response) {
+        if (response.balances() == null || response.balances().isEmpty()) {
+            return 0;
+        }
+
+        int savedCount = 0;
+        for (ExternalBalanceResponseDto.ExternalBalanceDto external : response.balances()) {
+            try {
+                AccountBalance balance = mapToEntity(accountId, external);
+                balanceService.saveBalance(balance);
+                savedCount++;
+            } catch (Exception e) {
+                log.error("Failed to save balance: {}", e.getMessage(), e);
+            }
+        }
+        return savedCount;
+    }
 
     /**
      * Полная синхронизация: счета + транзакции + балансы
      * Выполняется при добавлении нового банка или по требованию пользователя
-     * Инвалидирует кеш счетов после синхронизации
+     * Инвалидирует кеш счетов пользователя после синхронизации
      */
     @Transactional
-    @CacheEvict(value = "accounts", allEntries = true) // Очищаем весь кеш accounts
+    @CacheEvict(value = "accounts", key = "'user:' + #userId") // Очищаем кеш счетов пользователя
     public SyncResult syncAll(UUID userId, BankCredentials credentials, String forceConsentId) {
         log.info("starting full sync for user={}, bank={}", userId, credentials.bankId());
         
@@ -385,5 +581,17 @@ public class BankSyncService {
         public int balancesSynced;
         public long durationMs;
         public String errorMessage;
+
+        public SyncResult() {}
+
+        public SyncResult(boolean success, int accountsSynced, int transactionsSynced,
+                         int balancesSynced, long durationMs, String errorMessage) {
+            this.success = success;
+            this.accountsSynced = accountsSynced;
+            this.transactionsSynced = transactionsSynced;
+            this.balancesSynced = balancesSynced;
+            this.durationMs = durationMs;
+            this.errorMessage = errorMessage;
+        }
     }
 }

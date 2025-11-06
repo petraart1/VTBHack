@@ -43,5 +43,26 @@ public interface SyncLogRepository extends JpaRepository<SyncLog, UUID> {
      */
     @Query("SELECT s FROM SyncLog s WHERE s.startedAt < :before")
     List<SyncLog> findOlderThan(@Param("before") LocalDateTime before);
+
+    /**
+     * Подсчет общего количества синхронизаций после указанного времени
+     * Используется для health checks
+     */
+    @Query("SELECT COUNT(s) FROM SyncLog s WHERE s.startedAt >= :since")
+    long countRecentSyncs(@Param("since") LocalDateTime since);
+
+    /**
+     * Подсчет успешных синхронизаций после указанного времени
+     * Используется для health checks
+     */
+    @Query("SELECT COUNT(s) FROM SyncLog s WHERE s.startedAt >= :since AND s.status = 'SUCCESS'")
+    long countSuccessfulSyncs(@Param("since") LocalDateTime since);
+
+    /**
+     * Подсчет неудачных синхронизаций после указанного времени
+     * Используется для health checks
+     */
+    @Query("SELECT COUNT(s) FROM SyncLog s WHERE s.startedAt >= :since AND s.status = 'FAILED'")
+    long countFailedSyncs(@Param("since") LocalDateTime since);
 }
 

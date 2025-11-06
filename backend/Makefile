@@ -12,7 +12,7 @@ delete:
 	docker compose down --volumes
 
 psql-auth-db:
-	psql -h localhost -U postgres -d bank
+	psql -h localhost -U postgres -d auth
 
 psql-bank-db:
 	psql -h localhost -U postgres -d bank -p 5433

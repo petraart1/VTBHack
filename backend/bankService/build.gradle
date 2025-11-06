@@ -34,6 +34,10 @@ ext {
 dependencies {
 	// web
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+<<<<<<<< HEAD:backend/bankService/build.gradle
+========
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+>>>>>>>> 649e13f (restructure code):authService/build.gradle
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	
 	// security
@@ -63,9 +67,15 @@ dependencies {
 	implementation 'org.springframework.kafka:spring-kafka'
 
 	// resilience4j
+<<<<<<<< HEAD:backend/bankService/build.gradle
 	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 	implementation 'io.github.resilience4j:resilience4j-retry:2.2.0'
 	implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+========
+	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-retry:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
+>>>>>>>> 649e13f (restructure code):authService/build.gradle
 
 	// metrics
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
