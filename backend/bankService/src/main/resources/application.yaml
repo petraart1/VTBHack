@@ -1,0 +1,130 @@
+spring:
+  application:
+    name: bankService
+
+  datasource:
+    url: jdbc:postgresql://${BANK_DB_CONTAINER_NAME}:${DB_PORT}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: 86400000
+    
+jwt:
+  issuer: com.bank.auth
+  secret: ${JWT_SECRET:34cf09cbe5571911e487cafcd49b72946a133fe881c3de75ab2d412f226ef06f}
+
+logging:
+  level:
+    com:
+      bank:
+        controller: INFO
+        service: DEBUG
+    org:
+      springframework: WARN
+      liquibase: INFO
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# OpenAPI / Swagger конфигурация
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+    display-request-duration: true
+    doc-expansion: none
+  show-actuator: true
+
+# Конфигурация внешних банковских API
+bank:
+  configs:
+    vbank:
+      name: "VBank"
+      baseUrl: "https://vbank.open.bankingapi.ru"
+      tokenEndpoint: "/auth/bank-token"
+      accountsEndpoint: "/accounts"
+      transactionsEndpoint: "/accounts/{accountId}/transactions"
+      balancesEndpoint: "/accounts/{accountId}/balances"
+      connectTimeout: 10000
+      readTimeout: 30000
+    abank:
+      name: "ABank"
+      baseUrl: "https://abank.open.bankingapi.ru"
+      tokenEndpoint: "/auth/bank-token"
+      accountsEndpoint: "/accounts"
+      transactionsEndpoint: "/accounts/{accountId}/transactions"
+      balancesEndpoint: "/accounts/{accountId}/balances"
+      connectTimeout: 10000
+      readTimeout: 30000
+    sbank:
+      name: "SBank"
+      baseUrl: "https://sbank.open.bankingapi.ru"
+      tokenEndpoint: "/auth/bank-token"
+      accountsEndpoint: "/accounts"
+      transactionsEndpoint: "/accounts/{accountId}/transactions"
+      balancesEndpoint: "/accounts/{accountId}/balances"
+      connectTimeout: 10000
+      readTimeout: 30000
+
+# Resilience4j конфигурация
+resilience4j:
+  retry:
+    instances:
+      bankApi:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - org.springframework.web.client.ResourceAccessException
+        ignoreExceptions:
+          - com.bank.exception.BankApiException
+  
+  circuitbreaker:
+    instances:
+      bankApi:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+        recordExceptions:
+          - com.bank.exception.BankApiException
+          - java.net.ConnectException
