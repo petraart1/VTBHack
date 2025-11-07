@@ -175,38 +175,11 @@ jobs:
       
       - name: Verify deployment
         run: |
-          echo "Checking authService health..."
+          
+          # Health check for all services
+          echo "🔍 Checking all services..."
+          curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8080/actuator/health || exit 1
           curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8081/actuator/health || exit 1
-          
-          echo "Checking bankService health..."
           curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8082/actuator/health || exit 1
-          
-          echo "Checking radarService health..."
-          curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8083/actuator/health || exit 1
-          
-          echo "✅ All services are healthy!"
 
-  # Job 5: Slack Notification
- #notify-slack:
-    #runs-on: ubuntu-latest
-    #needs: [deploy-ansible]
-    #if: never()
-    
-    #steps:
-      #- name: Send Slack notification
-        #uses: slackapi/slack-github-action@v1
-        #with:
-          #webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          #payload: |
-            #{
-              #"text": "Backend deployment ${{ job.status }}",
-              #"blocks": [
-              #  {
-              #    "type": "section",
-              #    "text": {
-              #      "type": "mrkdwn",
-              #      "text": "*Backend Deployment Result:* ${{ job.status }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.sha }}\n*Environment:* Production"
-              #   }
-              #  }
-              #]
-            #}
+          echo "✅ All services (auth:8080, bank:8081, radar:8082) are healthy!"

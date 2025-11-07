@@ -49,6 +49,7 @@ dependencies {
 
 	// redis
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.apache.commons:commons-pool2:2.12.0'
 
 	// cache
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
@@ -56,9 +57,6 @@ dependencies {
 
 	// kafka
 	implementation 'org.springframework.kafka:spring-kafka'
-
-	// vault (optional)
-	implementation 'org.springframework.cloud:spring-cloud-starter-vault-config:4.1.0'
 
 	// resilience4j
 	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.1.0'

@@ -1,7 +1,5 @@
 FROM nginx:alpine
 
-RUN rm -rf /etc/nginx/conf.d/*
-
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY server.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80 443

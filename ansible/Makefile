@@ -12,9 +12,9 @@ help:
 	@echo "  update-secrets - Update secrets without full redeploy"
 	@echo "  check          - Dry run deployment"
 	@echo "  ping           - Test connection to servers"
-	@echo "  vault-create   - Create new vault file"
-	@echo "  vault-edit     - Edit vault file"
-	@echo "  vault-view     - View vault file"
+	@echo "  deploy         - Deploy to production"
+	@echo "  rollback       - Rollback to previous version"
+	@echo "  update-secrets - Update secrets"
 
 # Initial server setup
 setup:
@@ -54,12 +54,12 @@ vault-edit:
 vault-view:
 	ansible-vault view inventory/group_vars/vault.yaml
 
-# Vault management
-setup-vault:
-	ansible-playbook playbooks/setup-vault.yaml --ask-become-pass
+# Deployment commands
+deploy:
+	ansible-playbook playbooks/deploy-backend.yaml --ask-vault-pass
 
-load-secrets:
-	ansible-playbook playbooks/load-secrets.yaml --ask-vault-pass
+rollback:
+	ansible-playbook playbooks/rollback.yaml --ask-vault-pass
 
-vault-status:
-	curl -H "X-Vault-Token: $(VAULT_TOKEN)" http://localhost:8200/v1/sys/health || echo "Vault not running"
+update-secrets:
+	ansible-playbook playbooks/update-secrets.yaml --ask-vault-pass

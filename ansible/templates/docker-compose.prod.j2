@@ -2,20 +2,57 @@
 version: '3.8'
 
 services:
-  postgres:
+  # Databases
+  auth-db:
     image: postgres:16-alpine
     restart: always
-    container_name: {{ compose_project_name }}_postgres
+    container_name: {{ compose_project_name }}_auth_db
     environment:
-      POSTGRES_DB: banking_db
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - {{ deploy_dir }}/postgres-data:/var/lib/postgresql/data
+      - {{ deploy_dir }}/auth-db-data:/var/lib/postgresql/data
     networks:
       - backend-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bank-db:
+    image: postgres:16-alpine
+    restart: always
+    container_name: {{ compose_project_name }}_bank_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - {{ deploy_dir }}/bank-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  radar-db:
+    image: postgres:16-alpine
+    restart: always
+    container_name: {{ compose_project_name }}_radar_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - {{ deploy_dir }}/radar-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +61,7 @@ services:
     image: redis:7-alpine
     restart: always
     container_name: {{ compose_project_name }}_redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    command: redis-server --appendonly yes
     volumes:
       - {{ deploy_dir }}/redis-data:/data
     networks:
@@ -35,45 +72,101 @@ services:
       timeout: 3s
       retries: 5
 
-  bankservice:
-    image: {{ registry_url }}/{{ registry_prefix }}:{{ service_version }}
+  # Services
+  auth:
+    image: {{ registry_url }}/{{ registry_prefix }}/auth:{{ service_version }}
     restart: always
-    container_name: {{ compose_project_name }}_bankservice
-    ports:
-      - "8081:8081"
+    container_name: {{ compose_project_name }}_auth
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      DB_URL: ${DB_URL}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      AUTH_DB_CONTAINER_NAME: ${AUTH_DB_CONTAINER_NAME}
+      DB_PORT: ${DB_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      VBANK_API_URL: ${VBANK_API_URL}
-      VBANK_API_KEY: ${VBANK_API_KEY}
-      TBANK_API_URL: ${TBANK_API_URL}
-      TBANK_API_KEY: ${TBANK_API_KEY}
-      SBERBANK_API_URL: ${SBERBANK_API_URL}
-      SBERBANK_API_KEY: ${SBERBANK_API_KEY}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT}
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - {{ deploy_dir }}/logs/auth:/app/logs
+
+  bank:
+    image: {{ registry_url }}/{{ registry_prefix }}/bank:{{ service_version }}
+    restart: always
+    container_name: {{ compose_project_name }}_bank
+    environment:
+      BANK_DB_CONTAINER_NAME: ${BANK_DB_CONTAINER_NAME}
+      DB_PORT: 5433
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # No external API keys needed
+      AUTH_CONTAINER_URL: ${AUTH_CONTAINER_URL}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT}
       LOGGING_LEVEL_COM_BANK: ${LOGGING_LEVEL_COM_BANK}
     depends_on:
-      postgres:
+      bank-db:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - backend-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
     volumes:
-      - {{ deploy_dir }}/logs:/app/logs
+      - {{ deploy_dir }}/logs/bank:/app/logs
+
+  radar:
+    image: {{ registry_url }}/{{ registry_prefix }}/radar:{{ service_version }}
+    restart: always
+    container_name: {{ compose_project_name }}_radar
+    environment:
+      RADAR_DB_CONTAINER_NAME: ${RADAR_DB_CONTAINER_NAME}
+      DB_PORT: 5434
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_CONTAINER_URL: ${AUTH_CONTAINER_URL}
+      CHAT_CONTAINER_URL: ${CHAT_CONTAINER_URL}
+      RADAR_CONTAINER_URL: ${RADAR_CONTAINER_URL}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT}
+    depends_on:
+      radar-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - {{ deploy_dir }}/logs/radar:/app/logs
 
 networks:
   backend-network:

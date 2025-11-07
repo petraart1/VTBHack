@@ -126,14 +126,6 @@
         group: "{{ deploy_user }}"
         mode: '0755'
 
-    - name: Create staging deployment directory
-      file:
-        path: /home/{{ deploy_user }}/bankservice-staging
-        state: directory
-        owner: "{{ deploy_user }}"
-        group: "{{ deploy_user }}"
-        mode: '0755'
-      when: environment == "staging"
 
     - name: Set timezone to MSK
       timezone:

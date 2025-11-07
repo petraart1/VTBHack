@@ -1,4 +1,4 @@
-# Production Environment Variables for BankService
+# Production Environment Variables for BankServices
 ---
 # Docker Registry Configuration (GitHub Container Registry)
 registry_url: ghcr.io
@@ -15,29 +15,28 @@ compose_project_name: bank_prod
 # Service Version (обновляется CI/CD из GitHub Actions)
 service_version: "{{ lookup('env', 'GITHUB_SHA') | default('latest') }}"
 
-# Environment Variables (секреты из vault.yml)
+# Environment Variables
 env_vars:
-  # Database
-  DB_URL: "{{ vault_db_url }}"
-  DB_USER: "{{ vault_db_user }}"
-  DB_PASSWORD: "{{ vault_db_password }}"
+  # Database Configuration
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "{{ lookup('env', 'DB_PASSWORD') }}"
+  POSTGRES_DB: "banking_db"
+  DB_PORT: "5432"
+
+  # Database Container Names
+  AUTH_DB_CONTAINER_NAME: "auth-db"
+  BANK_DB_CONTAINER_NAME: "bank-db"
+  RADAR_DB_CONTAINER_NAME: "radar-db"
+
+  # Service URLs (internal communication)
+  AUTH_CONTAINER_URL: "http://auth:8080/api/v1/auth"
+  CHAT_CONTAINER_URL: "http://bank:8080/api/v1/bank"
+  RADAR_CONTAINER_URL: "http://radar:8080/api/v1/radar"
 
   # JWT Configuration
-  JWT_SECRET: "{{ vault_jwt_secret }}"
-  JWT_EXPIRATION_MS: "900000"
+  JWT_SECRET: "{{ lookup('env', 'JWT_SECRET') }}"
 
-  # Redis Configuration
-  REDIS_HOST: "redis"
-  REDIS_PORT: "6379"
-  REDIS_PASSWORD: "{{ vault_redis_password }}"
-
-  # Open Banking APIs
-  VBANK_API_URL: "{{ vault_vbank_api_url }}"
-  VBANK_API_KEY: "{{ vault_vbank_api_key }}"
-  TBANK_API_URL: "{{ vault_tbank_api_url }}"
-  TBANK_API_KEY: "{{ vault_tbank_api_key }}"
-  SBERBANK_API_URL: "{{ vault_sberbank_api_url }}"
-  SBERBANK_API_KEY: "{{ vault_sberbank_api_key }}"
+  # No external API keys needed
 
   # Spring Profiles
   SPRING_PROFILES_ACTIVE: "production"
