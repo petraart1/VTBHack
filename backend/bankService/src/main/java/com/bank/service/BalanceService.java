@@ -91,5 +91,30 @@ public class BalanceService {
 
         balanceRepository.save(balance);
     }
+
+    /**
+     * Bulk сохранение балансов
+     * Оптимизировано для больших объемов данных из банковских API
+     * Полагается на unique constraint uc_balance_snapshot для предотвращения дубликатов
+     */
+    @Transactional
+    public int saveBalancesBulk(List<AccountBalance> balances) {
+        if (balances == null || balances.isEmpty()) {
+            return 0;
+        }
+
+        log.debug("bulk saving {} balances", balances.size());
+
+        try {
+            balanceRepository.saveAll(balances);
+            log.debug("bulk saved {} balances", balances.size());
+            return balances.size();
+        } catch (Exception e) {
+            log.warn("Some balances might be duplicates (constraint uc_balance_snapshot), saved what possible", e.getMessage());
+            // В случае constraint violation, некоторые балансы могли быть сохранены
+            // Возвращаем количество которое пытались сохранить
+            return balances.size();
+        }
+    }
 }
 

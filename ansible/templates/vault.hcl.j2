@@ -1,0 +1,22 @@
+# Vault configuration for {{ environment }} environment
+
+listener "tcp" {
+  address       = "0.0.0.0:{{ vault_port }}"
+  tls_disable   = 1  # Disable TLS for development/staging
+}
+
+storage "file" {
+  path = "/var/lib/vault"
+}
+
+# Enable UI
+ui = true
+
+# Development mode (remove in production)
+{% if environment == 'staging' %}
+disable_mlock = true
+{% endif %}
+
+# API settings
+api_addr = "http://{{ ansible_host }}:{{ vault_port }}"
+cluster_addr = "http://{{ ansible_host }}:8201"

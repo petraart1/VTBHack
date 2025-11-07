@@ -70,7 +70,7 @@ public class RestClientConfig {
             long duration = System.currentTimeMillis() - startTime;
             
             // Логирование будет в BankApiClient
-
+            
             return response;
         };
     }

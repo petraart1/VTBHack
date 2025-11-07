@@ -46,16 +46,16 @@ public record ExternalBalanceResponseDto(
     public record ExternalBalanceDto(
             @JsonProperty("balanceType")
             String balanceType,
-
+            
             @JsonProperty("amount")
             Amount amount,
-
+            
             @JsonProperty("currency")
             String currency,
-
+            
             @JsonProperty("creditLine")
             BigDecimal creditLine,
-
+            
             @JsonProperty("asOfDateTime")
             String asOfDateTime
     ) {

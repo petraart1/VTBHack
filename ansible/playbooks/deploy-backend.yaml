@@ -1,0 +1,145 @@
+---
+- name: Deploy BankService Backend
+  hosts: production, staging
+  become: yes
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg: |
+          Deploying BankService to: {{ inventory_hostname }}
+          Environment: {{ environment }}
+          Deploy directory: {{ deploy_dir }}
+          Service version: {{ service_version }}
+
+  tasks:
+    # 1. Создать deployment директорию
+    - name: Create deployment directory
+      file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+
+    # 2. Создать директории для volumes
+    - name: Create volume directories
+      file:
+        path: "{{ deploy_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+      loop:
+        - postgres-data
+        - redis-data
+        - logs
+
+    # 3. Скопировать docker-compose.prod.yml
+    - name: Copy docker-compose.prod.yml to server
+      template:
+        src: ../templates/docker-compose.prod.j2
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0644'
+
+    # 4. Создать .env файл с секретами
+    - name: Create .env file with secrets
+      template:
+        src: ../templates/env.j2
+        dest: "{{ deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0600'
+      no_log: true
+
+    # 5. Login в Docker Registry
+    - name: Log in to GitHub Container Registry
+      docker_login:
+        registry_url: "{{ registry_url }}"
+        username: "{{ registry_username }}"
+        password: "{{ registry_password }}"
+      become_user: "{{ deploy_user }}"
+      no_log: true
+
+    # 6. Pull latest Docker image
+    - name: Pull latest Docker image
+      command: docker pull {{ registry_url }}/{{ registry_prefix }}:{{ service_version }}
+      become_user: "{{ deploy_user }}"
+      register: pull_result
+
+    - name: Display pull result
+      debug:
+        var: pull_result.stdout_lines
+
+    # 7. Stop old containers gracefully
+    - name: Stop old containers gracefully
+      command: docker-compose down --timeout 30
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ deploy_user }}"
+      environment:
+        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
+      ignore_errors: yes
+
+    # 8. Start new containers
+    - name: Start new containers
+      command: docker-compose up -d --remove-orphans --force-recreate
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ deploy_user }}"
+      environment:
+        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
+      register: up_result
+
+    - name: Display startup result
+      debug:
+        var: up_result.stdout_lines
+
+    # 9. Wait for service to be healthy
+    - name: Wait for BankService to be healthy
+      uri:
+        url: http://localhost:8081/actuator/health
+        method: GET
+        status_code: 200
+      register: health
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+      until: health.status == 200
+
+    # 10. Verify deployment
+    - name: Get running containers
+      command: docker-compose ps
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ deploy_user }}"
+      register: container_status
+
+    - name: Display container status
+      debug:
+        var: container_status.stdout_lines
+
+    # 11. Clean up old Docker images
+    - name: Clean up old Docker images
+      command: docker image prune -af --filter "until=72h"
+      become_user: "{{ deploy_user }}"
+      register: cleanup_result
+
+    - name: Display cleanup result
+      debug:
+        var: cleanup_result.stdout_lines
+
+  post_tasks:
+    - name: Display deployment success message
+      debug:
+        msg: |
+          ✅ BankService deployment successful!
+
+          Service running:
+          - BankService: http://{{ ansible_host }}:8081/actuator/health
+
+          To view logs:
+          cd {{ deploy_dir }} && docker-compose logs -f

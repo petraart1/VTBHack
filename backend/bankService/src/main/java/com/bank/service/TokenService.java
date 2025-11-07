@@ -75,7 +75,7 @@ public class TokenService {
         String teamId = extractTeamIdFromClientId(credentials.clientId());
 
         // Формируем URL с query параметрами для получения bank-token
-        String tokenUrl = bankConfig.getBaseUrl() + bankConfig.getTokenEndpoint()
+        String tokenUrl = bankConfig.getBaseUrl() + bankConfig.getTokenEndpoint() 
                 + "?client_id=" + teamId
                 + "&client_secret=" + credentials.password();
         

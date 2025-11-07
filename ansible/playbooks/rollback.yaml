@@ -1,0 +1,90 @@
+---
+- name: Rollback BankService to Previous Version
+  hosts: production, staging
+  become: yes
+  vars_files:
+    - ../inventory/group_vars/vault.yml
+
+  vars_prompt:
+    - name: rollback_version
+      prompt: "Enter the version/tag to rollback to (e.g., abc1234)"
+      private: no
+
+  tasks:
+    - name: Display rollback information
+      debug:
+        msg: |
+          ⚠️  ROLLBACK OPERATION ⚠️
+
+          Rolling back BankService to version: {{ rollback_version }}
+          Target: {{ inventory_hostname }}
+          Deploy directory: {{ deploy_dir }}
+
+    - name: Confirm rollback
+      pause:
+        prompt: "Press ENTER to continue with rollback, or Ctrl+C to abort"
+
+    - name: Update service version for rollback
+      set_fact:
+        service_version: "{{ rollback_version }}"
+
+    - name: Pull rollback Docker image
+      command: docker pull {{ registry_url }}/{{ registry_prefix }}:{{ rollback_version }}
+      become_user: "{{ deploy_user }}"
+      register: pull_result
+
+    - name: Display pull result
+      debug:
+        var: pull_result.stdout_lines
+
+    - name: Update .env file with rollback version
+      template:
+        src: ../templates/env.j2
+        dest: "{{ deploy_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0600'
+      no_log: true
+
+    - name: Stop current containers
+      command: docker-compose down --timeout 30
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ deploy_user }}"
+      environment:
+        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
+
+    - name: Start containers with rollback version
+      command: docker-compose up -d --remove-orphans --force-recreate
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ deploy_user }}"
+      environment:
+        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
+
+    - name: Wait for service to restart
+      uri:
+        url: http://localhost:8081/actuator/health
+        method: GET
+        status_code: 200
+      register: health_check
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+      until: health_check.status == 200
+
+    - name: Verify rollback
+      command: docker-compose ps
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: "{{ deploy_user }}"
+      register: rollback_status
+
+    - name: Display rollback status
+      debug:
+        msg: |
+          ✅ Rollback complete!
+
+          BankService rolled back to version: {{ rollback_version }}
+
+          Container status:
+          {{ rollback_status.stdout }}

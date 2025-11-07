@@ -1,6 +1,18 @@
 spring:
   application:
     name: bankService
+  cloud:
+    vault:
+      enabled: ${VAULT_ENABLED:false}
+      authentication: TOKEN
+      token: ${VAULT_TOKEN}
+      scheme: http
+      host: ${VAULT_HOST:localhost}
+      port: ${VAULT_PORT:8200}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: bankservice/${SPRING_PROFILES_ACTIVE:production}
 
   datasource:
     url: jdbc:postgresql://${BANK_DB_CONTAINER_NAME}:${DB_PORT}/${POSTGRES_DB}
@@ -29,7 +41,9 @@ spring:
   redis:
     host: ${REDIS_HOST:localhost}
     port: ${REDIS_PORT:6379}
-    timeout: 2000ms
+    password: ${REDIS_PASSWORD:}  # Опциональный пароль
+    database: ${REDIS_DATABASE:0} # Номер базы данных (0-15)
+    timeout: 2000ms               # Таймаут подключения
     lettuce:
       pool:
         # Redis connection pool оптимизация
@@ -38,7 +52,10 @@ spring:
         min-idle: 5              # Минимум 5 простаивающих соединений
         max-wait: 3000ms         # Максимум 3 секунды ожидания соединения
         time-between-eviction-runs: 60000ms  # Проверка каждые 60 секунд
-      shutdown-timeout: 100ms
+        test-on-borrow: true     # Проверять соединения при получении
+        test-on-return: false    # Не проверять при возврате
+        test-while-idle: true    # Проверять простаивающие соединения
+      shutdown-timeout: 100ms    # Таймаут завершения
 
   jpa:
     hibernate:
@@ -136,7 +153,7 @@ resilience4j:
           - reactor.core.Exceptions$ReactiveException
         ignoreExceptions:
           - com.bank.exception.BankApiException
-
+  
   circuitbreaker:
     instances:
       bankApi:

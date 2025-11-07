@@ -72,6 +72,11 @@ public class BankAccount {
     @Column(name = "last_sync_at")
     private LocalDateTime lastSyncAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

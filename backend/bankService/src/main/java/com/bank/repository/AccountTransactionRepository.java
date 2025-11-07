@@ -9,7 +9,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -88,6 +90,18 @@ public interface AccountTransactionRepository extends JpaRepository<AccountTrans
     Optional<AccountTransaction> findByAccountAndExternalId(
             @Param("accountId") UUID accountId,
             @Param("externalId") String externalId
+    );
+
+    /**
+     * Поиск существующих external IDs для bulk операций
+     * Оптимизировано для предотвращения дубликатов при массовом импорте
+     * Возвращает Set для быстрого поиска
+     */
+    @Query("SELECT t.externalTransactionId FROM AccountTransaction t " +
+            "WHERE t.accountId = :accountId AND t.externalTransactionId IN :externalIds")
+    Set<String> findExistingExternalIds(
+            @Param("accountId") UUID accountId,
+            @Param("externalIds") List<String> externalIds
     );
 }
 

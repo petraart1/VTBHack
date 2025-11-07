@@ -49,34 +49,34 @@ public record ExternalTransactionResponseDto(
     public record ExternalTransactionDto(
             @JsonProperty("transactionId")
             String transactionId,
-
+            
             @JsonProperty("bookingDateTime")
             String bookingDateTime,
-
+            
             @JsonProperty("valueDateTime")
             String valueDateTime,
-
+            
             @JsonProperty("amount")
             Amount amount,
-
+            
             @JsonProperty("currency")
             String currency,
-
+            
             @JsonProperty("debitCreditIndicator")
             String debitCreditIndicator,
-
+            
             @JsonProperty("status")
             String status,
-
+            
             @JsonProperty("description")
             String description,
-
+            
             @JsonProperty("merchantName")
             String merchantName,
-
+            
             @JsonProperty("merchantCategoryCode")
             String merchantCategoryCode,
-
+            
             @JsonProperty("runningBalance")
             BigDecimal runningBalance
     ) {

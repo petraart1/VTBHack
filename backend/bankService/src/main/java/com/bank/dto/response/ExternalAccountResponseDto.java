@@ -45,25 +45,25 @@ public record ExternalAccountResponseDto(
     public record ExternalAccountDto(
             @JsonProperty("accountId")
             String accountId,
-
+            
             @JsonProperty("status")
             String status,
-
+            
             @JsonProperty("currency")
             String currency,
-
+            
             @JsonProperty("accountType")
             String accountType,
 
             @JsonProperty("accountSubType")
             String accountSubType,
-
+            
             @JsonProperty("nickname")
             String nickname,
-
+            
             @JsonProperty("openingDate")
             String openingDate,
-
+            
             @JsonProperty("account")
             List<AccountDetail> account
     ) {

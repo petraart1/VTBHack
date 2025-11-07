@@ -62,23 +62,23 @@ public class BankApiClient {
     public reactor.core.publisher.Mono<ExternalAccountResponseDto> getAccountsReactive(UUID userId, BankCredentials credentials) {
         BankProperties.BankConfig bankConfig = getBankConfig(credentials.bankId());
         String accessToken = tokenService.getAccessToken(userId, credentials);
-
+        
         // Используем clientId из credentials (обязательно в формате teamXXX-Y)
         String clientId = credentials.clientId();
         if (clientId == null || clientId.isBlank()) {
             throw new IllegalArgumentException("clientId is required and must be in format teamXXX-Y");
         }
-
+        
         // Получаем consent_id для межбанкового запроса
         String consentId = consentService.getConsentId(userId, credentials, clientId);
-
+        
         // URL с client_id query параметром для межбанкового запроса
         String url = bankConfig.getBaseUrl() + bankConfig.getAccountsEndpoint() + "?client_id=" + clientId;
-
+        
         // Извлекаем teamId для логирования и заголовков
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching accounts reactively from bank={} for user={}, client_id={}, team_id={}, consent_id={}",
-                credentials.bankId(), userId, "***", teamId, consentId);
+                credentials.bankId(), userId, "***", "***", "***");
 
         return bankWebClient.get()
                 .uri(url)
@@ -106,12 +106,14 @@ public class BankApiClient {
                         })
                 .bodyToMono(ExternalAccountResponseDto.class)
                 .doOnNext(response -> {
-                    log.info("External API response received: accounts count={}, full data={}",
-                            response.accounts() != null ? response.accounts().size() : "null", response);
+                    log.info("External API response received: accounts count={}, has data={}",
+                            response.accounts() != null ? response.accounts().size() : "null",
+                            response != null ? "yes" : "no");
 
                     // Проверяем, что accounts не null
                     if (response.accounts() == null || response.accounts().isEmpty()) {
-                        log.warn("accounts list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                        log.warn("accounts list is null or empty in response from bank={}, response present={}",
+                                credentials.bankId(), response != null ? "yes" : "no");
                         throw new BankApiException(
                                 "Empty accounts response from bank",
                                 502,
@@ -205,7 +207,7 @@ public class BankApiClient {
 
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching transactions reactively from bank={} for user={}, account={}, client_id={}, team_id={}, consent_id={}",
-                credentials.bankId(), userId, accountId, "***", teamId, consentId);
+                credentials.bankId(), userId, accountId, "***", "***", "***");
 
         return bankWebClient.get()
                 .uri(url)
@@ -233,11 +235,13 @@ public class BankApiClient {
                         })
                 .bodyToMono(ExternalTransactionResponseDto.class)
                 .doOnNext(response -> {
-                    log.info("External API response received: transactions count={}, full data={}",
-                            response.transactions() != null ? response.transactions().size() : "null", response);
+                    log.info("External API response received: transactions count={}, has data={}",
+                            response.transactions() != null ? response.transactions().size() : "null",
+                            response != null ? "yes" : "no");
 
                     if (response.transactions() == null || response.transactions().isEmpty()) {
-                        log.warn("transactions list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                        log.warn("transactions list is null or empty in response from bank={}, response present={}",
+                                credentials.bankId(), response != null ? "yes" : "no");
                         throw new BankApiException(
                                 "Empty transactions response from bank",
                                 502,
@@ -276,7 +280,7 @@ public class BankApiClient {
 
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching balances reactively from bank={} for user={}, account={}, client_id={}, team_id={}, consent_id={}",
-                credentials.bankId(), userId, accountId, "***", teamId, consentId);
+                credentials.bankId(), userId, accountId, "***", "***", "***");
 
         return bankWebClient.get()
                 .uri(url)
@@ -304,11 +308,13 @@ public class BankApiClient {
                         })
                 .bodyToMono(ExternalBalanceResponseDto.class)
                 .doOnNext(response -> {
-                    log.info("External API response received: balances count={}, full data={}",
-                            response.balances() != null ? response.balances().size() : "null", response);
+                    log.info("External API response received: balances count={}, has data={}",
+                            response.balances() != null ? response.balances().size() : "null",
+                            response != null ? "yes" : "no");
 
                     if (response.balances() == null || response.balances().isEmpty()) {
-                        log.warn("balances list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                        log.warn("balances list is null or empty in response from bank={}, response present={}",
+                                credentials.bankId(), response != null ? "yes" : "no");
                         throw new BankApiException(
                                 "Empty balances response from bank",
                                 502,
@@ -354,7 +360,7 @@ public class BankApiClient {
         // Извлекаем teamId для логирования и заголовков
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching accounts from bank={} for user={}, client_id={}, team_id={}, consent_id={}",
-                credentials.bankId(), userId, clientId, teamId, consentId);
+                credentials.bankId(), userId, "***", "***", "***");
         log.info("External API URL: {}", url);
 
         try {
@@ -370,7 +376,7 @@ public class BankApiClient {
                             (request, responseEntity) -> {
                                 log.error("External API returned error status: {} for URL: {}", responseEntity.getStatusCode(), url);
                                 log.error("Response body: {}", responseEntity.getBody());
-                                handleBankApiError(responseEntity.getStatusCode().value(),
+                                handleBankApiError(responseEntity.getStatusCode().value(), 
                                         credentials.bankId(), "getAccounts");
                             })
                     .onStatus(status -> status.is2xxSuccessful(),
@@ -379,7 +385,7 @@ public class BankApiClient {
                                 log.info("RAW API RESPONSE BODY: {}", responseEntity.getBody());
                             })
                     .body(ExternalAccountResponseDto.class);
-
+            
             if (response == null) {
                 log.error("Response is null from external API for URL: {}", url);
                 throw new BankApiException(
@@ -388,13 +394,16 @@ public class BankApiClient {
                         credentials.bankId()
                 );
             }
-
-            // Логируем полный ответ для диагностики
-            log.info("External API response received: accounts count={}, full data={}", response.accounts() != null ? response.accounts().size() : "null", response);
+            
+            // Логируем ответ без чувствительных данных
+            log.info("External API response received: accounts count={}, has data={}",
+                    response.accounts() != null ? response.accounts().size() : "null",
+                    response != null ? "yes" : "no");
 
             // Проверяем, что accounts не null
             if (response.accounts() == null || response.accounts().isEmpty()) {
-                log.warn("accounts list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                log.warn("accounts list is null or empty in response from bank={}, response present={}",
+                        credentials.bankId(), response != null ? "yes" : "no");
                 // Возвращаем DTO с пустым списком
                 return new ExternalAccountResponseDto(
                         new ExternalAccountResponseDto.Data(List.of()),
@@ -459,8 +468,8 @@ public class BankApiClient {
         // Извлекаем teamId для заголовков
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching transactions from bank={} for account={}, client_id={}, team_id={}, consent_id={}",
-                credentials.bankId(), accountId, clientId, teamId, consentId);
-
+                credentials.bankId(), accountId, "***", "***", "***");
+        
         try {
             ExternalTransactionResponseDto response = bankRestClient.get()
                     .uri(url)
@@ -491,12 +500,15 @@ public class BankApiClient {
                 );
             }
             
-            // Логируем полный ответ для диагностики
-            log.info("External API response received: transactions count={}, full data={}", response.transactions() != null ? response.transactions().size() : "null", response);
+            // Логируем ответ без чувствительных данных
+            log.info("External API response received: transactions count={}, has data={}",
+                    response.transactions() != null ? response.transactions().size() : "null",
+                    response != null ? "yes" : "no");
 
             // Проверяем, что transactions не null
             if (response.transactions() == null || response.transactions().isEmpty()) {
-                log.warn("transactions list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                log.warn("transactions list is null or empty in response from bank={}, response present={}",
+                        credentials.bankId(), response != null ? "yes" : "no");
                 // Возвращаем DTO с пустым списком
                 return new ExternalTransactionResponseDto(
                         new ExternalTransactionResponseDto.Data(List.of()),
@@ -504,10 +516,10 @@ public class BankApiClient {
                         null
                 );
             }
-
+            
             log.info("successfully fetched {} transactions from bank={}",
                     response.transactions().size(), credentials.bankId());
-
+            
             return response;
             
         } catch (RestClientException e) {
@@ -554,8 +566,8 @@ public class BankApiClient {
         // Извлекаем teamId для заголовков
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching balances from bank={} for account={}, client_id={}, team_id={}, consent_id={}",
-                credentials.bankId(), accountId, clientId, teamId, consentId);
-
+                credentials.bankId(), accountId, "***", "***", "***");
+        
         try {
             ExternalBalanceResponseDto response = bankRestClient.get()
                     .uri(url)
@@ -586,12 +598,15 @@ public class BankApiClient {
                 );
             }
             
-            // Логируем полный ответ для диагностики
-            log.info("External API response received: balances count={}, full data={}", response.balances() != null ? response.balances().size() : "null", response);
+            // Логируем ответ без чувствительных данных
+            log.info("External API response received: balances count={}, has data={}",
+                    response.balances() != null ? response.balances().size() : "null",
+                    response != null ? "yes" : "no");
 
             // Проверяем, что balances не null
             if (response.balances() == null || response.balances().isEmpty()) {
-                log.warn("balances list is null or empty in response from bank={}, full response: {}", credentials.bankId(), response);
+                log.warn("balances list is null or empty in response from bank={}, response present={}",
+                        credentials.bankId(), response != null ? "yes" : "no");
                 // Возвращаем DTO с пустым списком
                 return new ExternalBalanceResponseDto(
                         new ExternalBalanceResponseDto.Data(List.of()),
@@ -599,10 +614,10 @@ public class BankApiClient {
                         null
                 );
             }
-
+            
             log.info("successfully fetched {} balances from bank={}",
                     response.balances().size(), credentials.bankId());
-
+            
             return response;
             
         } catch (RestClientException e) {

@@ -170,7 +170,7 @@ public class ConsentService {
         log.info("Cleared consent cache for user={}, bank={}, clientId={}", userId, bankId, clientId);
     }
 
-    /**
+            /**
      * Создание согласия через OpenBanking API (приватный метод для внутреннего использования)
      * POST /account-consents/request
      */
@@ -185,7 +185,7 @@ public class ConsentService {
         String url = bankConfig.getBaseUrl() + "/account-consents/request";
         
         log.info("creating consent for client_id={}, bank={}, team_id={}, url={}", clientId, credentials.bankId(), teamId, url);
-
+        
         try {
             ConsentResponseDto response = bankRestClient.post()
                     .uri(url)

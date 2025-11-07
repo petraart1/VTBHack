@@ -1,0 +1,52 @@
+# Production Environment Variables for BankService
+---
+# Docker Registry Configuration (GitHub Container Registry)
+registry_url: ghcr.io
+registry_username: "{{ lookup('env', 'GITHUB_ACTOR') }}"
+registry_password: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+registry_prefix: "your-org/bankservice"  # Замените на ваш organization
+
+# Project Configuration
+project_name: bankservice
+deploy_user: deploy
+deploy_dir: /home/deploy/bankservice
+compose_project_name: bank_prod
+
+# Service Version (обновляется CI/CD из GitHub Actions)
+service_version: "{{ lookup('env', 'GITHUB_SHA') | default('latest') }}"
+
+# Environment Variables (секреты из vault.yml)
+env_vars:
+  # Database
+  DB_URL: "{{ vault_db_url }}"
+  DB_USER: "{{ vault_db_user }}"
+  DB_PASSWORD: "{{ vault_db_password }}"
+
+  # JWT Configuration
+  JWT_SECRET: "{{ vault_jwt_secret }}"
+  JWT_EXPIRATION_MS: "900000"
+
+  # Redis Configuration
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "{{ vault_redis_password }}"
+
+  # Open Banking APIs
+  VBANK_API_URL: "{{ vault_vbank_api_url }}"
+  VBANK_API_KEY: "{{ vault_vbank_api_key }}"
+  TBANK_API_URL: "{{ vault_tbank_api_url }}"
+  TBANK_API_KEY: "{{ vault_tbank_api_key }}"
+  SBERBANK_API_URL: "{{ vault_sberbank_api_url }}"
+  SBERBANK_API_KEY: "{{ vault_sberbank_api_key }}"
+
+  # Spring Profiles
+  SPRING_PROFILES_ACTIVE: "production"
+
+  # Logging
+  LOGGING_LEVEL_ROOT: "INFO"
+  LOGGING_LEVEL_COM_BANK: "INFO"
+
+# Health Check Configuration
+health_check_retries: 10
+health_check_delay: 10
+health_check_timeout: 5

@@ -25,6 +25,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Сервис для синхронизации данных из внешних банков
@@ -40,6 +45,9 @@ public class BankSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(BankSyncService.class);
 
+    // Блокировка для предотвращения одновременной синхронизации одного пользователя/банка
+    private final ConcurrentHashMap<String, Semaphore> syncLocks = new ConcurrentHashMap<>();
+
     private final BankApiClient bankApiClient;
     private final BankService bankService;
     private final TransactionService transactionService;
@@ -48,18 +56,62 @@ public class BankSyncService {
     private final SyncLogRepository syncLogRepository;
 
     /**
+     * Получить блокировку для синхронизации пользователя/банка
+     * Возвращает true если блокировка получена, false если таймаут
+     */
+    private boolean acquireSyncLock(UUID userId, String bankId) {
+        String lockKey = userId + ":" + bankId;
+        Semaphore lock = syncLocks.computeIfAbsent(lockKey, k -> new Semaphore(1));
+
+        try {
+            boolean acquired = lock.tryAcquire(30, TimeUnit.SECONDS); // 30 сек таймаут
+            if (acquired) {
+                log.debug("Acquired sync lock for user={}, bank={}", userId, bankId);
+            } else {
+                log.warn("Failed to acquire sync lock for user={}, bank={} (timeout)", userId, bankId);
+            }
+            return acquired;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while acquiring sync lock for user={}, bank={}", userId, bankId);
+            return false;
+        }
+    }
+
+    /**
+     * Освободить блокировку для синхронизации пользователя/банка
+     */
+    private void releaseSyncLock(UUID userId, String bankId) {
+        String lockKey = userId + ":" + bankId;
+        Semaphore lock = syncLocks.get(lockKey);
+        if (lock != null) {
+            lock.release();
+            log.debug("Released sync lock for user={}, bank={}", userId, bankId);
+        }
+    }
+
+    /**
      * Реактивная версия полной синхронизации: счета + транзакции + балансы
      * Все операции выполняются параллельно для максимальной производительности
      */
-    @Transactional
     @CacheEvict(value = "accounts", key = "'user:' + #userId")
     public reactor.core.publisher.Mono<SyncResult> syncAllReactive(UUID userId, BankCredentials credentials) {
         log.info("starting reactive full sync for user={}, bank={}", userId, credentials.bankId());
+
+        // Проверяем блокировку перед началом синхронизации
+        if (!acquireSyncLock(userId, credentials.bankId())) {
+            return reactor.core.publisher.Mono.error(new SyncFailedException(
+                "Another sync operation is already in progress for this user/bank"));
+        }
 
         long startTime = System.currentTimeMillis();
 
         // Получаем счета реактивно
         return bankApiClient.getAccountsReactive(userId, credentials)
+                .doFinally(signalType -> {
+                    // Всегда освобождаем блокировку
+                    releaseSyncLock(userId, credentials.bankId());
+                })
                 .flatMap(accountsResponse -> {
                     // После получения счетов, синхронизируем их и получаем список accountIds
                     int accountsSynced = syncAccountsFromResponse(userId, credentials.bankId(), accountsResponse);
@@ -204,17 +256,13 @@ public class BankSyncService {
             return 0;
         }
 
-        int savedCount = 0;
-        for (ExternalTransactionResponseDto.ExternalTransactionDto external : response.transactions()) {
-            try {
-                AccountTransaction transaction = mapToEntity(accountId, external);
-                transactionService.saveTransaction(transaction);
-                savedCount++;
-            } catch (Exception e) {
-                log.error("Failed to save transaction: {}", e.getMessage(), e);
-            }
-        }
-        return savedCount;
+        // Преобразуем все транзакции в entities
+        List<AccountTransaction> transactions = response.transactions().stream()
+                .map(external -> mapToEntity(accountId, external))
+                .collect(Collectors.toList());
+
+        // Bulk сохранение с проверкой дубликатов
+        return transactionService.saveTransactionsBulk(transactions);
     }
 
     /**
@@ -225,17 +273,13 @@ public class BankSyncService {
             return 0;
         }
 
-        int savedCount = 0;
-        for (ExternalBalanceResponseDto.ExternalBalanceDto external : response.balances()) {
-            try {
-                AccountBalance balance = mapToEntity(accountId, external);
-                balanceService.saveBalance(balance);
-                savedCount++;
-            } catch (Exception e) {
-                log.error("Failed to save balance: {}", e.getMessage(), e);
-            }
-        }
-        return savedCount;
+        // Преобразуем все балансы в entities
+        List<AccountBalance> balances = response.balances().stream()
+                .map(external -> mapToEntity(accountId, external))
+                .collect(Collectors.toList());
+
+        // Bulk сохранение с обработкой constraint violations
+        return balanceService.saveBalancesBulk(balances);
     }
 
     /**
@@ -243,10 +287,14 @@ public class BankSyncService {
      * Выполняется при добавлении нового банка или по требованию пользователя
      * Инвалидирует кеш счетов пользователя после синхронизации
      */
-    @Transactional
     @CacheEvict(value = "accounts", key = "'user:' + #userId") // Очищаем кеш счетов пользователя
     public SyncResult syncAll(UUID userId, BankCredentials credentials, String forceConsentId) {
         log.info("starting full sync for user={}, bank={}", userId, credentials.bankId());
+
+        // Проверяем блокировку перед началом синхронизации
+        if (!acquireSyncLock(userId, credentials.bankId())) {
+            throw new SyncFailedException("Another sync operation is already in progress for this user/bank");
+        }
         
         long startTime = System.currentTimeMillis();
         SyncResult result = new SyncResult();
@@ -290,7 +338,43 @@ public class BankSyncService {
             log.error("full sync failed for user={}, bank={}: {}", userId, credentials.bankId(), e.getMessage(), e);
             
             throw new SyncFailedException(e.getMessage(), e);
+        } finally {
+            // Всегда освобождаем блокировку
+            releaseSyncLock(userId, credentials.bankId());
         }
+    }
+
+    /**
+     * Выполняет синхронизацию в транзакции
+     */
+    @Transactional
+    private SyncResult executeSyncInTransaction(UUID userId, BankCredentials credentials, String forceConsentId, long startTime) {
+        SyncResult result = new SyncResult();
+
+        // 1. Синхронизация счетов
+        result.accountsSynced = syncAccounts(userId, credentials, forceConsentId);
+
+        // 2. Синхронизация транзакций (для всех счетов)
+        result.transactionsSynced = syncTransactions(userId, credentials);
+
+        // 3. Синхронизация балансов
+        result.balancesSynced = syncBalances(userId, credentials);
+
+        long duration = System.currentTimeMillis() - startTime;
+        result.success = true;
+        result.durationMs = duration;
+
+        // Логирование успеха
+        logSyncOperation(userId, null, "FULL_SYNC", "SUCCESS",
+                String.format("Synced: %d accounts, %d transactions, %d balances",
+                        result.accountsSynced, result.transactionsSynced, result.balancesSynced),
+                result.accountsSynced + result.transactionsSynced + result.balancesSynced,
+                duration);
+
+        log.info("full sync completed successfully for user={}, bank={}, duration={}ms",
+                userId, credentials.bankId(), duration);
+
+        return result;
     }
 
     /**
@@ -300,9 +384,9 @@ public class BankSyncService {
     public int syncAccounts(UUID userId, BankCredentials credentials, String forceConsentId) {
         log.info("syncing accounts for user={}, bank={}, clientId={}, forceConsentId={}",
                 userId, credentials.bankId(), credentials.clientId(), forceConsentId);
-
+        
         long startTime = System.currentTimeMillis();
-
+        
         try {
             ExternalAccountResponseDto response;
             if (forceConsentId != null && !forceConsentId.isBlank()) {
@@ -312,16 +396,16 @@ public class BankSyncService {
             }
             log.info("Received {} accounts from external API for user={}, bank={}",
                     response.accounts().size(), userId, credentials.bankId());
-
+            
             int savedCount = 0;
             for (ExternalAccountResponseDto.ExternalAccountDto externalAccount : response.accounts()) {
                 try {
                     log.debug("Processing account: externalId={}, currency={}",
                             externalAccount.accountId(), externalAccount.currency());
 
-                    BankAccount account = mapToEntity(userId, credentials.bankId(), externalAccount);
-                    bankService.saveAccount(account);
-                    savedCount++;
+                BankAccount account = mapToEntity(userId, credentials.bankId(), externalAccount);
+                bankService.saveAccount(account);
+                savedCount++;
 
                     log.debug("Saved account {}/{}: id={}, externalId={}",
                             savedCount, response.accounts().size(), account.getId(), account.getExternalAccountId());
@@ -379,15 +463,61 @@ public class BankSyncService {
         long startTime = System.currentTimeMillis();
         
         try {
-            for (BankAccount account : accounts) {
+            // Оптимизация N+1: выполняем запросы параллельно с ограничением concurrency
+            // Максимум 3 одновременных запроса, чтобы не превысить rate limits
+            final int MAX_CONCURRENT_REQUESTS = 3;
+
+            List<CompletableFuture<List<AccountTransaction>>> futures = new ArrayList<>();
+
+            for (int i = 0; i < accounts.size(); i += MAX_CONCURRENT_REQUESTS) {
+                // Группируем запросы по MAX_CONCURRENT_REQUESTS штук
+                int endIndex = Math.min(i + MAX_CONCURRENT_REQUESTS, accounts.size());
+                List<BankAccount> batch = accounts.subList(i, endIndex);
+
+                // Создаем CompletableFuture для каждой группы запросов
+                for (BankAccount account : batch) {
+                    CompletableFuture<List<AccountTransaction>> future = CompletableFuture.supplyAsync(() -> {
+                        try {
                 ExternalTransactionResponseDto response = bankApiClient.getTransactions(
                         userId, credentials, account.getExternalAccountId(), from, to
                 );
                 
-                for (ExternalTransactionResponseDto.ExternalTransactionDto externalTx : response.transactions()) {
-                    AccountTransaction transaction = mapToEntity(account.getId(), externalTx);
-                    transactionService.saveTransaction(transaction);
-                    totalTransactions++;
+                            // Преобразуем все транзакции в entities
+                            return response.transactions().stream()
+                                    .map(externalTx -> mapToEntity(account.getId(), externalTx))
+                                    .collect(Collectors.toList());
+
+                        } catch (Exception e) {
+                            log.error("Failed to sync transactions for account {}: {}", account.getId(), e.getMessage());
+                            return List.of(); // Возвращаем пустой список в случае ошибки
+                        }
+                    });
+                    futures.add(future);
+                }
+
+                // Ждем завершения всех запросов в текущей группе и делаем bulk сохранение
+                try {
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            .get(30, TimeUnit.SECONDS); // Таймаут 30 секунд на группу
+
+                    // Собираем все транзакции из всех futures
+                    List<AccountTransaction> allTransactions = new ArrayList<>();
+                    for (CompletableFuture<List<AccountTransaction>> future : futures) {
+                        allTransactions.addAll(future.get());
+                    }
+
+                    // Bulk сохранение всех транзакций группы
+                    if (!allTransactions.isEmpty()) {
+                        int savedCount = transactionService.saveTransactionsBulk(allTransactions);
+                        totalTransactions += savedCount;
+                        log.debug("bulk saved {} transactions in batch", savedCount);
+                    }
+
+                    futures.clear();
+
+                } catch (Exception e) {
+                    log.error("Timeout or error in transaction sync batch: {}", e.getMessage());
+                    throw new SyncFailedException("Transaction sync timeout: " + e.getMessage(), e);
                 }
             }
             
@@ -396,7 +526,8 @@ public class BankSyncService {
             logSyncOperation(userId, null, "TRANSACTIONS", "SUCCESS",
                     "Synced " + totalTransactions + " transactions", totalTransactions, duration);
             
-            log.info("synced {} transactions for user={}, bank={}", totalTransactions, userId, credentials.bankId());
+            log.info("synced {} transactions for {} accounts in {}ms (parallel processing)",
+                    totalTransactions, accounts.size(), duration);
             
             return totalTransactions;
             
@@ -435,15 +566,61 @@ public class BankSyncService {
         long startTime = System.currentTimeMillis();
         
         try {
-            for (BankAccount account : accounts) {
+            // Оптимизация N+1: выполняем запросы параллельно с ограничением concurrency
+            // Максимум 3 одновременных запроса, чтобы не превысить rate limits
+            final int MAX_CONCURRENT_REQUESTS = 3;
+
+            List<CompletableFuture<List<AccountBalance>>> futures = new ArrayList<>();
+
+            for (int i = 0; i < accounts.size(); i += MAX_CONCURRENT_REQUESTS) {
+                // Группируем запросы по MAX_CONCURRENT_REQUESTS штук
+                int endIndex = Math.min(i + MAX_CONCURRENT_REQUESTS, accounts.size());
+                List<BankAccount> batch = accounts.subList(i, endIndex);
+
+                // Создаем CompletableFuture для каждой группы запросов
+                for (BankAccount account : batch) {
+                    CompletableFuture<List<AccountBalance>> future = CompletableFuture.supplyAsync(() -> {
+                        try {
                 ExternalBalanceResponseDto response = bankApiClient.getBalances(
                         userId, credentials, account.getExternalAccountId()
                 );
                 
-                for (ExternalBalanceResponseDto.ExternalBalanceDto externalBalance : response.balances()) {
-                    AccountBalance balance = mapToEntity(account.getId(), externalBalance);
-                    balanceService.saveBalance(balance);
-                    totalBalances++;
+                            // Преобразуем все балансы в entities
+                            return response.balances().stream()
+                                    .map(externalBalance -> mapToEntity(account.getId(), externalBalance))
+                                    .collect(Collectors.toList());
+
+                        } catch (Exception e) {
+                            log.error("Failed to sync balances for account {}: {}", account.getId(), e.getMessage());
+                            return List.of(); // Возвращаем пустой список в случае ошибки
+                        }
+                    });
+                    futures.add(future);
+                }
+
+                // Ждем завершения всех запросов в текущей группе и делаем bulk сохранение
+                try {
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            .get(30, TimeUnit.SECONDS); // Таймаут 30 секунд на группу
+
+                    // Собираем все балансы из всех futures
+                    List<AccountBalance> allBalances = new ArrayList<>();
+                    for (CompletableFuture<List<AccountBalance>> future : futures) {
+                        allBalances.addAll(future.get());
+                    }
+
+                    // Bulk сохранение всех балансов группы
+                    if (!allBalances.isEmpty()) {
+                        int savedCount = balanceService.saveBalancesBulk(allBalances);
+                        totalBalances += savedCount;
+                        log.debug("bulk saved {} balances in batch", savedCount);
+                    }
+
+                    futures.clear();
+
+                } catch (Exception e) {
+                    log.error("Timeout or error in balance sync batch: {}", e.getMessage());
+                    throw new SyncFailedException("Balance sync timeout: " + e.getMessage(), e);
                 }
             }
             
@@ -452,7 +629,8 @@ public class BankSyncService {
             logSyncOperation(userId, null, "BALANCES", "SUCCESS",
                     "Synced " + totalBalances + " balances", totalBalances, duration);
             
-            log.info("synced {} balances for user={}, bank={}", totalBalances, userId, credentials.bankId());
+            log.info("synced {} balances for {} accounts in {}ms (parallel processing)",
+                    totalBalances, accounts.size(), duration);
             
             return totalBalances;
             

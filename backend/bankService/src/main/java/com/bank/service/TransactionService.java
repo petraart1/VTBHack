@@ -10,6 +10,11 @@ import com.bank.exception.TransactionNotFoundException;
 import com.bank.model.AccountTransaction;
 import com.bank.repository.AccountRepository;
 import com.bank.repository.AccountTransactionRepository;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -121,6 +126,49 @@ public class TransactionService {
                         existing -> log.debug("transaction already exists, skipping: {}", externalId),
                         () -> transactionRepository.save(transaction)
                 );
+    }
+
+    /**
+     * Bulk сохранение транзакций с проверкой дубликатов
+     * Оптимизировано для больших объемов данных из банковских API
+     */
+    @Transactional
+    public int saveTransactionsBulk(List<AccountTransaction> transactions) {
+        if (transactions == null || transactions.isEmpty()) {
+            return 0;
+        }
+
+        log.debug("bulk saving {} transactions", transactions.size());
+
+        int savedCount = 0;
+        List<AccountTransaction> toSave = new ArrayList<>();
+
+        // Группируем по accountId для оптимизации запросов
+        Map<UUID, List<AccountTransaction>> byAccount = transactions.stream()
+                .collect(Collectors.groupingBy(AccountTransaction::getAccountId));
+
+        for (Map.Entry<UUID, List<AccountTransaction>> entry : byAccount.entrySet()) {
+            UUID accountId = entry.getKey();
+            List<String> externalIds = entry.getValue().stream()
+                    .map(AccountTransaction::getExternalTransactionId)
+                    .collect(Collectors.toList());
+
+            // Находим существующие транзакции одним запросом
+            Set<String> existingIds = transactionRepository.findExistingExternalIds(accountId, externalIds);
+
+            // Фильтруем только новые транзакции
+            entry.getValue().stream()
+                    .filter(tx -> !existingIds.contains(tx.getExternalTransactionId()))
+                    .forEach(toSave::add);
+        }
+
+        if (!toSave.isEmpty()) {
+            transactionRepository.saveAll(toSave);
+            savedCount = toSave.size();
+            log.debug("bulk saved {} new transactions", savedCount);
+        }
+
+        return savedCount;
     }
 }
 
