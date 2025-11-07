@@ -45,13 +45,6 @@ jobs:
       - name: Run tests
         working-directory: backend/${{ matrix.service }}
         run: ./gradlew test
-      
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ matrix.service }}
-          path: backend/${{ matrix.service }}/build/reports/tests/
 
   # Job 2: Security Scan
   security-scan:
