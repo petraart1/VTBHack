@@ -21,7 +21,6 @@ permissions:
   id-token: write
 
 jobs:
-  # Job 1: Build и Test
   build-and-test:
     runs-on: ubuntu-latest
     strategy:
@@ -98,8 +97,6 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build and push bankService Docker image
         uses: docker/build-push-action@v5
@@ -108,8 +105,6 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build and push radarService Docker image
         uses: docker/build-push-action@v5
@@ -118,8 +113,6 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   # Job 4: Deploy with Ansible
   deploy-ansible:
