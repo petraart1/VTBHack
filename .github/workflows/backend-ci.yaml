@@ -20,6 +20,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service: [authService, bankService, radarService]
     
@@ -72,7 +73,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-test, security-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [authService, bankService, radarService]
+  
     permissions:
       contents: read
       packages: write
