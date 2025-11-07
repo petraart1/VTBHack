@@ -121,9 +121,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService
+            ${{ env.REGISTRY }}/${{ github.repository | lower }}/authService
+            ${{ env.REGISTRY }}/${{ github.repository | lower }}/bankService
+            ${{ env.REGISTRY }}/${{ github.repository | lower }}/radarService
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
@@ -137,7 +137,7 @@ jobs:
         with:
           context: backend/authService
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService:${{ github.ref_name }}-${{ github.sha }}
+          tags: ${{ env.REGISTRY }}/${{ github.repository | lower }}/authService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           builder: ${{ steps.buildx.outputs.name }}
           build-args: |
@@ -148,7 +148,7 @@ jobs:
         with:
           context: backend/bankService
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService:${{ github.ref_name }}-${{ github.sha }}
+          tags: ${{ env.REGISTRY }}/${{ github.repository | lower }}/bankService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           builder: ${{ steps.buildx.outputs.name }}
           build-args: |
@@ -159,7 +159,7 @@ jobs:
         with:
           context: backend/radarService
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService:${{ github.ref_name }}-${{ github.sha }}
+          tags: ${{ env.REGISTRY }}/${{ github.repository | lower }}/radarService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           builder: ${{ steps.buildx.outputs.name }}
           build-args: |
