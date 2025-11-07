@@ -57,6 +57,22 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Build JAR
+        working-directory: backend/${{ matrix.service }}
+        run: ./gradlew assemble -x test
+
+      - name: Convert service name for artifact
+        run: |
+          SERVICE_NAME=${{ matrix.service }}
+          ARTIFACT_NAME=$(echo "$SERVICE_NAME" | sed 's/Service/-service/')
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ env.ARTIFACT_NAME }}
+          path: backend/${{ matrix.service }}/build/libs/*.jar
+
   # Job 3: Build и Push Docker Images
   docker-build-push:
     runs-on: ubuntu-latest
@@ -70,6 +86,28 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Convert service name for artifact download
+        run: |
+          echo "Processing authService, bankService, radarService"
+
+      - name: Download authService artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-auth-service
+          path: backend/authService/build/libs/
+
+      - name: Download bankService artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-bank-service
+          path: backend/bankService/build/libs/
+
+      - name: Download radarService artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-radar-service
+          path: backend/radarService/build/libs/
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -90,6 +128,10 @@ jobs:
             type=ref,event=branch
             type=sha,prefix={{branch}}-
 
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push authService Docker image
         uses: docker/build-push-action@v5
         with:
@@ -97,6 +139,9 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
+          builder: ${{ steps.buildx.outputs.name }}
+          build-args: |
+            JAR_FILE=build/libs/*.jar
 
       - name: Build and push bankService Docker image
         uses: docker/build-push-action@v5
@@ -105,6 +150,9 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
+          builder: ${{ steps.buildx.outputs.name }}
+          build-args: |
+            JAR_FILE=build/libs/*.jar
 
       - name: Build and push radarService Docker image
         uses: docker/build-push-action@v5
@@ -113,6 +161,9 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService:${{ github.ref_name }}-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
+          builder: ${{ steps.buildx.outputs.name }}
+          build-args: |
+            JAR_FILE=build/libs/*.jar
 
   # Job 4: Deploy with Ansible
   deploy-ansible:
