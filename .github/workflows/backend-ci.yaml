@@ -79,46 +79,61 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-test, security-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    strategy:
-      matrix:
-        service: [authService, bankService, radarService]
-    
+
     permissions:
       contents: read
       packages: write
-    
-    outputs:
-      auth_service_tag: ${{ steps.meta-auth.outputs.version }}
-      bank_service_tag: ${{ steps.meta-bank.outputs.version }}
-      radar_service_tag: ${{ steps.meta-radar.outputs.version }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
-        id: meta-${{ matrix.service }}
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
-      
-      - name: Build and push Docker image
+
+      - name: Build and push authService Docker image
         uses: docker/build-push-action@v5
         with:
-          context: backend/${{ matrix.service }}
+          context: backend/authService
           push: true
-          tags: ${{ steps.meta-${{ matrix.service }}.outputs.tags }}
-          labels: ${{ steps.meta-${{ matrix.service }}.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService:${{ github.ref_name }}-${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push bankService Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend/bankService
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService:${{ github.ref_name }}-${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push radarService Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend/radarService
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService:${{ github.ref_name }}-${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
