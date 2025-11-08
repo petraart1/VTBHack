@@ -5,7 +5,7 @@ on:
     branches: [main, develop]
     paths:
       - 'backend/**'
-      - '.github/workflows/backend-ci.yml'
+      - '.github/workflows/backend-ci.yaml'
   pull_request:
     branches: [main, develop]
     paths:
@@ -26,54 +26,46 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [authService, bankService, radarService]
-    
+        service: 
+          - name: authService
+            skip_tests: true
+          - name: bankService
+            skip_tests: false
+          - name: radarService
+            skip_tests: false
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
           cache: 'gradle'
-      
+
       - name: Grant execute permission for gradlew
-        working-directory: backend/${{ matrix.service }}
+        working-directory: backend/${{ matrix.service.name }}
         run: chmod +x gradlew
-      
+
       - name: Build with Gradle
-        working-directory: backend/${{ matrix.service }}
-        run: ./gradlew clean build -x test
-      
+        working-directory: backend/${{ matrix.service.name }}
+        run: ./gradlew clean build -x test --info
+
       - name: Run tests
-        working-directory: backend/${{ matrix.service }}
-        run: |
-          if [ "${{ matrix.service }}" = "authService" ]; then
-            echo "Skipping authService tests due to compilation issues"
-          else
-            ./gradlew test
-          fi
+        if: ${{ !matrix.service.skip_tests }}
+        working-directory: backend/${{ matrix.service.name }}
+        run: ./gradlew test --info
         continue-on-error: true
-
-      - name: Build JAR
-        working-directory: backend/${{ matrix.service }}
-        run: ./gradlew assemble -x test
-
-      - name: Convert service name for artifact
-        run: |
-          SERVICE_NAME=${{ matrix.service }}
-          ARTIFACT_NAME=$(echo "$SERVICE_NAME" | sed 's/Service/-service/')
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ env.ARTIFACT_NAME }}
-          path: backend/${{ matrix.service }}/build/libs/*.jar
+          name: jar-${{ matrix.service.name }}
+          path: backend/${{ matrix.service.name }}/build/libs/*.jar
+          retention-days: 1
 
-  # Job 3: Build и Push Docker Images
   docker-build-push:
     runs-on: ubuntu-latest
     needs: build-and-test
@@ -87,27 +79,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Convert service name for artifact download
+      - name: Convert service name to lowercase
+        id: service_lower
         run: |
-          echo "Processing authService, bankService, radarService"
+          SERVICE_LOWER=$(echo "${{ matrix.service }}" | tr '[:upper:]' '[:lower:]')
+          echo "service_lower=$SERVICE_LOWER" >> $GITHUB_OUTPUT
 
-      - name: Download authService artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-auth-service
-          path: backend/authService/build/libs/
-
-      - name: Download bankService artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-bank-service
-          path: backend/bankService/build/libs/
-
-      - name: Download radarService artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-radar-service
-          path: backend/radarService/build/libs/
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -116,56 +95,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService
+          name: jar-${{ matrix.service }}
+          path: backend/${{ matrix.service }}/build/libs/
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend/${{ matrix.service }}
+          push: true
           tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push authService Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: backend/authService
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/authService:${{ github.ref_name }}-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          builder: ${{ steps.buildx.outputs.name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ steps.service_lower.outputs.service_lower }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ steps.service_lower.outputs.service_lower }}:${{ github.ref_name }}-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             JAR_FILE=build/libs/*.jar
 
-      - name: Build and push bankService Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: backend/bankService
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/bankService:${{ github.ref_name }}-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          builder: ${{ steps.buildx.outputs.name }}
-          build-args: |
-            JAR_FILE=build/libs/*.jar
-
-      - name: Build and push radarService Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: backend/radarService
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/radarService:${{ github.ref_name }}-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          builder: ${{ steps.buildx.outputs.name }}
-          build-args: |
-            JAR_FILE=build/libs/*.jar
-
-  # Job 4: Deploy with Ansible
   deploy-ansible:
     runs-on: ubuntu-latest
     needs: docker-build-push
@@ -173,56 +121,67 @@ jobs:
     environment:
       name: production
       url: https://api.radarsubscriptions.com
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
-      
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.PRODUCTION_SERVER_IP }} >> ~/.ssh/known_hosts
-      
+          ssh-keyscan -H ${{ secrets.PRODUCTION_SERVER_IP }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
       - name: Create Ansible Vault password file
         run: |
+          mkdir -p ~/.ansible
           echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > ~/.ansible_vault_pass
           chmod 600 ~/.ansible_vault_pass
-      
-      - name: Update service versions in inventory
+
+      - name: Update service versions in production.yaml
         run: |
-          sed -i "s/auth_service: .*/auth_service: \"${{ github.ref_name }}-${{ github.sha }}\"/" \
-            ansible/inventory/group_vars/production.yml
-          sed -i "s/bank_service: .*/bank_service: \"${{ github.ref_name }}-${{ github.sha }}\"/" \
-            ansible/inventory/group_vars/production.yml
-          sed -i "s/radar_service: .*/radar_service: \"${{ github.ref_name }}-${{ github.sha }}\"/" \
-            ansible/inventory/group_vars/production.yml
-      
+          IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
+          PROD_FILE="ansible/inventory/group_vars/production.yaml"
+          
+          sed -i "s/authService_version: .*/authService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+          sed -i "s/bankService_version: .*/bankService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+          sed -i "s/radarService_version: .*/radarService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+
       - name: Run Ansible playbook
         run: |
           ansible-playbook \
-            -i ansible/inventory/hosts.yml \
-            ansible/playbooks/deploy-backend.yml \
+            -i ansible/inventory/hosts.yaml \
+            ansible/playbooks/deploy-backend.yaml \
             --vault-password-file ~/.ansible_vault_pass \
-            -e "github_token=${{ secrets.GITHUB_TOKEN }}" \
-            -e "github_actor=${{ github.actor }}" \
-            --limit production
+            --limit production \
+            -vv
         env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
-      
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          PRODUCTION_SERVER_IP: ${{ secrets.PRODUCTION_SERVER_IP }}
+
       - name: Verify deployment
         run: |
+          echo "🔍 Checking services..."
           
-          # Health check for all services
-          echo "🔍 Checking all services..."
-          curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8080/actuator/health || exit 1
-          curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8081/actuator/health || exit 1
-          curl -f http://${{ secrets.PRODUCTION_SERVER_IP }}:8082/actuator/health || exit 1
-
-          echo "✅ All services (auth:8080, bank:8081, radar:8082) are healthy!"
+          for port in 8080 8081 8082; do
+            echo "Checking port $port..."
+            for i in {1..30}; do
+              if curl -sf http://${{ secrets.PRODUCTION_SERVER_IP }}:$port/actuator/health > /dev/null 2>&1; then
+                echo "✅ Service on port $port is healthy"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "❌ Service on port $port failed"
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+          
+          echo "✅ All services are healthy!"
