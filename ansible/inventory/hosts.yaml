@@ -1,15 +1,11 @@
-# BankService Ansible Inventory
-# Определяет серверы для backend deployment
-
+# hosts.yaml
 all:
   children:
-    # Production environment - backend only
     production:
       hosts:
         backend-prod:
-          ansible_host: YOUR_SERVER_IP  # Замените на реальный IP
+          ansible_host: "{{ lookup('env', 'PRODUCTION_SERVER_IP') }}"
           ansible_user: deploy
           ansible_ssh_private_key_file: ~/.ssh/deploy_key
           ansible_python_interpreter: /usr/bin/python3
-          server_role: backend
-          environment: production
+          deploy_environment: production
