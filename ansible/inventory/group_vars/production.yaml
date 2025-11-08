@@ -1,51 +1,43 @@
-# Production Environment Variables for BankServices
 ---
-# Docker Registry Configuration (GitHub Container Registry)
+# Production Environment Variables
 registry_url: ghcr.io
+registry_prefix: petraart1/vtbhack
+project_name: vtbhack
+deploy_user: deploy
+deploy_dir: /opt/services
+compose_project_name: vtbhack_prod
+
+# Service versions (обновляются GitHub Actions)
+authService_version: "main-latest"
+bankService_version: "main-latest"
+radarService_version: "main-latest"
+
+# Database config
+postgres_db: vtbhack_db
+postgres_user: vtbhack
+
+# Redis
+redis_host: redis
+redis_port: 6379
+
+# Health checks
+health_check_retries: 30
+health_check_delay: 2
+
+# Service ports
+auth_port: 8080
+bank_port: 8081
+radar_port: 8082
+
+# Logging
+logging_level_root: "INFO"
+spring_profiles_active: "production"
+
+# Service inter-communication
+auth_url: "http://auth:8080"
+bank_url: "http://bank:8081"
+radar_url: "http://radar:8082"
+
+# Registry auth (используются из env)
 registry_username: "{{ lookup('env', 'GITHUB_ACTOR') }}"
 registry_password: "{{ lookup('env', 'GITHUB_TOKEN') }}"
-registry_prefix: "your-org/bankservice"  # Замените на ваш organization
-
-# Project Configuration
-project_name: bankservice
-deploy_user: deploy
-deploy_dir: /home/deploy/bankservice
-compose_project_name: bank_prod
-
-# Service Version (обновляется CI/CD из GitHub Actions)
-service_version: "{{ lookup('env', 'GITHUB_SHA') | default('latest') }}"
-
-# Environment Variables
-env_vars:
-  # Database Configuration
-  POSTGRES_USER: "postgres"
-  POSTGRES_PASSWORD: "{{ lookup('env', 'DB_PASSWORD') }}"
-  POSTGRES_DB: "banking_db"
-  DB_PORT: "5432"
-
-  # Database Container Names
-  AUTH_DB_CONTAINER_NAME: "auth-db"
-  BANK_DB_CONTAINER_NAME: "bank-db"
-  RADAR_DB_CONTAINER_NAME: "radar-db"
-
-  # Service URLs (internal communication)
-  AUTH_CONTAINER_URL: "http://auth:8080/api/v1/auth"
-  CHAT_CONTAINER_URL: "http://bank:8080/api/v1/bank"
-  RADAR_CONTAINER_URL: "http://radar:8080/api/v1/radar"
-
-  # JWT Configuration
-  JWT_SECRET: "{{ lookup('env', 'JWT_SECRET') }}"
-
-  # No external API keys needed
-
-  # Spring Profiles
-  SPRING_PROFILES_ACTIVE: "production"
-
-  # Logging
-  LOGGING_LEVEL_ROOT: "INFO"
-  LOGGING_LEVEL_COM_BANK: "INFO"
-
-# Health Check Configuration
-health_check_retries: 10
-health_check_delay: 10
-health_check_timeout: 5

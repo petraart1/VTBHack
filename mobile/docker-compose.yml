@@ -1,10 +1,21 @@
 version: '3.8'
+
 services:
   android-builder:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
-      - ./:/app
-    working_dir: /app
-    command: ./gradlew assembleDebug test
-    # ports:
-    #   - "5037:5037" # если надо пробросить ADB наружу
+      # Пробрасываем только папку mobile
+      - ./mobile:/app/mobile
+      # Кэшируем gradle между запусками для ускорения сборки
+      - gradle_cache:/app/.gradle
+      # Выводим APK наружу
+      - ./mobile/app/build:/app/mobile/app/build
+    working_dir: /app/mobile
+    # Сборка происходит в Dockerfile CMD
+    environment:
+      - GRADLE_OPTS=-Xmx4096m -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4
+
+volumes:
+  gradle_cache:

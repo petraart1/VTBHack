@@ -1,0 +1,141 @@
+spring:
+  application:
+    name: radarService
+    
+  datasource:
+    url: jdbc:postgresql://${RADAR_DB_CONTAINER_NAME}:${DB_PORT}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 20000
+      
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+    
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+# JWT Configuration (копируем из других сервисов)
+jwt:
+  secret: ${JWT_SECRET}
+  issuer: com.bank.auth
+
+# BankService integration
+bank-service:
+  url: ${BANK_SERVICE_URL:http://bank:8080}
+  timeout: 30s
+
+# Resilience4j configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      bankService:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    instances:
+      bankService:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+# Subscription detection configuration
+subscription:
+  detection:
+    enabled: true
+    cron: "0 0 2 * * *"  # Каждую ночь в 2:00
+    min-occurrences: 3  # Минимум 3 платежа для определения подписки
+    max-std-dev-days: 7  # Максимальное отклонение в днях для регулярного платежа
+    lookback-months: 6  # Анализировать транзакции за последние 6 месяцев
+  price-monitoring:
+    enabled: true
+    cron: "0 0 */6 * * *"  # Каждые 6 часов
+    price-increase-threshold: 5.0  # Порог повышения цены в % для алерта
+  unused-detection:
+    enabled: true
+    cron: "0 0 3 * * MON"  # Каждый понедельник в 3:00
+    days-without-activity: 60  # Подписка неактивна если нет связанных транзакций 60 дней
+
+# Cache configuration
+spring.cache:
+  type: caffeine
+  caffeine:
+    spec: maximumSize=1000,expireAfterWrite=300s
+
+# Actuator configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+
+# Logging configuration
+logging:
+  level:
+    com.bank: DEBUG
+    org.springframework: WARN
+    io.github.resilience4j: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# OpenAPI / Swagger configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+    display-request-duration: true
+    doc-expansion: none
+  show-actuator: true
+
+---
+# Test profile configuration
+spring:
+  config:
+    activate:
+      on-profile: test
+      
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    
+  liquibase:
+    enabled: false

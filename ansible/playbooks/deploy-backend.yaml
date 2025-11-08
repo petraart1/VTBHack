@@ -1,29 +1,31 @@
 ---
-- name: Deploy BankService Backend
+- name: Deploy Backend Services with 3 DBs
   hosts: production
   become: yes
+  gather_facts: yes
+  
+  vars_files:
+    - ../inventory/group_vars/vault.yaml
 
   pre_tasks:
-    - name: Display deployment information
+    - name: Display deployment info
       debug:
         msg: |
-          Deploying BankService to: {{ inventory_hostname }}
-          Environment: {{ environment }}
-          Deploy directory: {{ deploy_dir }}
-          Service version: {{ service_version }}
+          🚀 Deploying Backend Services
+          Host: {{ inventory_hostname }}
+          Deploy dir: {{ deploy_dir }}
+          
+          Services:
+          - Auth: {{ authService_version }}
+          - Bank: {{ bankService_version }}
+          - Radar: {{ radarService_version }}
+
+    - name: Check Docker
+      command: docker --version
+      changed_when: false
 
   tasks:
-    # 1. Создать deployment директорию
-    - name: Create deployment directory
-      file:
-        path: "{{ deploy_dir }}"
-        state: directory
-        owner: "{{ deploy_user }}"
-        group: "{{ deploy_user }}"
-        mode: '0755'
-
-    # 2. Создать директории для volumes
-    - name: Create volume directories
+    - name: Create deployment directories
       file:
         path: "{{ deploy_dir }}/{{ item }}"
         state: directory
@@ -31,12 +33,16 @@
         group: "{{ deploy_user }}"
         mode: '0755'
       loop:
-        - postgres-data
+        - auth-db-data
+        - bank-db-data
+        - radar-db-data
         - redis-data
-        - logs
+        - prometheus-data
+        - logs/auth
+        - logs/bank
+        - logs/radar
 
-    # 3. Скопировать docker-compose.prod.yml
-    - name: Copy docker-compose.prod.yml to server
+    - name: Copy docker-compose.yml
       template:
         src: ../templates/docker-compose.prod.j2
         dest: "{{ deploy_dir }}/docker-compose.yml"
@@ -44,8 +50,7 @@
         group: "{{ deploy_user }}"
         mode: '0644'
 
-    # 4. Создать .env файл с секретами
-    - name: Create .env file with secrets
+    - name: Create .env file
       template:
         src: ../templates/env.j2
         dest: "{{ deploy_dir }}/.env"
@@ -54,90 +59,73 @@
         mode: '0600'
       no_log: true
 
-    # 5. Login в Docker Registry
     - name: Log in to GitHub Container Registry
-      docker_login:
-        registry_url: "{{ registry_url }}"
-        username: "{{ registry_username }}"
-        password: "{{ registry_password }}"
+      shell: |
+        echo "{{ registry_password }}" | docker login -u {{ registry_username }} --password-stdin {{ registry_url }}
       become_user: "{{ deploy_user }}"
       no_log: true
+      changed_when: false
 
-    # 6. Pull latest Docker image
-    - name: Pull latest Docker image
-      command: docker pull {{ registry_url }}/{{ registry_prefix }}:{{ service_version }}
+    - name: Pull Docker images
+      shell: |
+        docker pull {{ registry_url }}/{{ registry_prefix }}/{{ item }}:{{ hostvars[inventory_hostname][item + '_version'] }}
       become_user: "{{ deploy_user }}"
-      register: pull_result
+      loop:
+        - authService
+        - bankService
+        - radarService
+      ignore_errors: yes
 
-    - name: Display pull result
-      debug:
-        var: pull_result.stdout_lines
-
-    # 7. Stop old containers gracefully
-    - name: Stop old containers gracefully
-      command: docker-compose down --timeout 30
-      args:
-        chdir: "{{ deploy_dir }}"
+    - name: Stop old containers
+      shell: |
+        cd {{ deploy_dir }}
+        docker-compose down --timeout 30 2>/dev/null || true
       become_user: "{{ deploy_user }}"
       environment:
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
       ignore_errors: yes
 
-    # 8. Start new containers
     - name: Start new containers
-      command: docker-compose up -d --remove-orphans --force-recreate
-      args:
-        chdir: "{{ deploy_dir }}"
+      shell: |
+        cd {{ deploy_dir }}
+        docker-compose up -d --remove-orphans --force-recreate
       become_user: "{{ deploy_user }}"
       environment:
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
       register: up_result
 
-    - name: Display startup result
-      debug:
-        var: up_result.stdout_lines
-
-    # 9. Wait for service to be healthy
-    - name: Wait for BankService to be healthy
+    - name: Wait for services
       uri:
-        url: http://localhost:8081/actuator/health
+        url: "http://localhost:{{ item }}/actuator/health"
         method: GET
         status_code: 200
-      register: health
-      retries: "{{ health_check_retries }}"
-      delay: "{{ health_check_delay }}"
-      until: health.status == 200
+      retries: 30
+      delay: 2
+      until: uri_result.status == 200
+      loop:
+        - "{{ auth_port }}"
+        - "{{ bank_port }}"
+        - "{{ radar_port }}"
+      ignore_errors: yes
+      register: uri_result
 
-    # 10. Verify deployment
-    - name: Get running containers
-      command: docker-compose ps
-      args:
-        chdir: "{{ deploy_dir }}"
+    - name: Get container status
+      shell: "cd {{ deploy_dir }} && docker-compose ps"
       become_user: "{{ deploy_user }}"
       register: container_status
+      changed_when: false
 
-    - name: Display container status
+    - name: Display status
       debug:
         var: container_status.stdout_lines
 
-    # 11. Clean up old Docker images
-    - name: Clean up old Docker images
-      command: docker image prune -af --filter "until=72h"
-      become_user: "{{ deploy_user }}"
-      register: cleanup_result
-
-    - name: Display cleanup result
-      debug:
-        var: cleanup_result.stdout_lines
-
   post_tasks:
-    - name: Display deployment success message
+    - name: Success message
       debug:
         msg: |
-          ✅ BankService deployment successful!
-
-          Service running:
-          - BankService: http://{{ ansible_host }}:8081/actuator/health
-
-          To view logs:
-          cd {{ deploy_dir }} && docker-compose logs -f
+          ✅ Deployment successful!
+          
+          Services:
+          - Auth: http://{{ ansible_host }}:{{ auth_port }}/actuator/health
+          - Bank: http://{{ ansible_host }}:{{ bank_port }}/actuator/health
+          - Radar: http://{{ ansible_host }}:{{ radar_port }}/actuator/health

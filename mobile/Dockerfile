@@ -1,39 +1,66 @@
-# Используем официальный образ Ubuntu
-FROM ubuntu:22.04
+# Stage 1: базовый образ с инструментами
+FROM ubuntu:22.04 AS base
 
-# Установим необходимые инструменты
+# Установим необходимые инструменты (без Android SDK)
 RUN apt-get update && \
-    apt-get install -y wget unzip openjdk-17-jdk git curl build-essential \
+    apt-get install -y --no-install-recommends \
+    wget \
+    unzip \
+    openjdk-17-jdk-headless \
+    git \
+    curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Установим Gradle вручную (если не используешь gradle-wrapper)
-ENV GRADLE_VERSION=8.5
-RUN wget https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip \
-    && unzip gradle-${GRADLE_VERSION}-bin.zip -d /opt \
-    && ln -s /opt/gradle-${GRADLE_VERSION}/bin/gradle /usr/bin/gradle
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=${PATH}:${JAVA_HOME}/bin
 
-# Установим Android SDK
-ENV ANDROID_HOME /opt/android-sdk
-ENV PATH ${PATH}:${ANDROID_HOME}/cmdline-tools/tools/bin:${ANDROID_HOME}/platform-tools
+# Stage 2: установка Android SDK (отдельный слой для кэширования)
+FROM base AS android-sdk
+
+ENV ANDROID_HOME=/opt/android-sdk
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
+
+# Создаём директории
 RUN mkdir -p ${ANDROID_HOME}/cmdline-tools
-RUN wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip \
-    && unzip tools.zip -d ${ANDROID_HOME}/cmdline-tools \
-    && mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/tools \
-    && rm tools.zip
 
-# Скачиваем SDK платформы и build-tools
-RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses
-RUN sdkmanager --sdk_root=${ANDROID_HOME} "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+# Скачиваем и устанавливаем Command Line Tools
+RUN wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/tools.zip && \
+    unzip /tmp/tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
+    mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
+    rm /tmp/tools.zip
 
-# Копируем проект внутрь контейнера
+# Устанавливаем SDK платформы и build-tools
+RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses && \
+    sdkmanager --sdk_root=${ANDROID_HOME} \
+    "platforms;android-34" \
+    "build-tools;34.0.0" \
+    "platform-tools" \
+    "emulator"
+
+# Stage 3: финальный образ с приложением
+FROM android-sdk AS builder
+
 WORKDIR /app
-COPY . .
 
-# Устанавливаем переменную окружения для gradle cache
-ENV GRADLE_USER_HOME=/cache/.gradle
+# Копируем только gradle-related файлы для кэширования зависимостей
+COPY mobile/gradle ./mobile/gradle
+COPY mobile/gradlew ./mobile/
+COPY mobile/build.gradle.kts ./mobile/
+COPY mobile/settings.gradle.kts ./mobile/
+COPY mobile/gradle.properties ./mobile/
 
-# Открываем порты ADB (по необходимости)
-EXPOSE 5037
+# Кэшируем gradle зависимости (этот слой переиспользуется если gradle-файлы не изменились)
+RUN cd mobile && ./gradlew --version
 
-# Сборка apk и Unit тесты
-CMD ./gradlew assembleDebug test
+# Копируем весь исходный код
+COPY mobile ./mobile
+
+# Переменные окружения
+ENV GRADLE_USER_HOME=/app/.gradle
+ENV GRADLE_OPTS="-Xmx4096m -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4"
+
+# Сборка APK и тесты
+RUN cd mobile && ./gradlew assembleDebug test --info
+
+# Результаты находятся в mobile/app/build/outputs/apk/debug/app-debug.apk
