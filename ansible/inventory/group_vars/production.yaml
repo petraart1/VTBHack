@@ -1,4 +1,9 @@
 ---
+# Deployment user
+deploy_user: vm_0
+deploy_dir: /opt/services
+compose_project_name: vtbhack_prod
+
 # PostgreSQL
 postgres_db: vtbhack_db
 postgres_user: vtbhack
