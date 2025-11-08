@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'mobile/**'
-      - '.github/workflows/mobile-build.yml'
+      - '.github/workflows/docker-compose.yml'
     branches:
       - main
   pull_request:
