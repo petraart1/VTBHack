@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  android-builder:
+    build: .
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: ./gradlew assembleDebug test
+    # ports:
+    #   - "5037:5037" # если надо пробросить ADB наружу

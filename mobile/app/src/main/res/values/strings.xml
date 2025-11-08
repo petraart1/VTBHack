@@ -1,0 +1,96 @@
+<resources>
+    <string name="app_name">Мультибанк</string>
+    
+    <!-- Welcome Screen -->
+    <string name="welcome_title">Мультибанковское приложение</string>
+    <string name="welcome_subtitle">Управляйте всеми своими банковскими счетами в одном месте</string>
+    <string name="start_button">Начать</string>
+    <string name="feature_auth">Безопасная авторизация OAuth2</string>
+    <string name="feature_analytics">Аналитика и графики трат</string>
+    <string name="feature_notifications">Уведомления о событиях</string>
+    
+    <!-- Login Screen -->
+    <string name="login_title">Авторизация</string>
+    <string name="login_welcome">Добро пожаловать</string>
+    <string name="login_subtitle">Войдите в свой аккаунт или подключите банк</string>
+    <string name="login_button">Войти</string>
+    <string name="login_biometric">Войти по биометрии</string>
+    <string name="login_connect_bank">Или подключите банк</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Пароль</string>
+    <string name="back_button">Назад</string>
+    
+    <!-- Dashboard -->
+    <string name="dashboard_title">Главная</string>
+    <string name="dashboard_welcome">Добро пожаловать</string>
+    <string name="dashboard_finances">Ваши финансы</string>
+    <string name="total_balance">Общий баланс</string>
+    <string name="quick_actions">Быстрые действия</string>
+    <string name="recent_transactions">Недавние транзакции</string>
+    <string name="view_all">Все</string>
+    
+    <!-- Accounts -->
+    <string name="accounts_title">Счета</string>
+    <string name="accounts_cards">Счета и карты</string>
+    <string name="no_accounts">Нет подключенных счетов</string>
+    <string name="no_accounts_subtitle">Подключите банк, чтобы начать управлять финансами</string>
+    <string name="connect_bank">Подключить банк</string>
+    <string name="add_account">Добавить счет</string>
+    <string name="connected_accounts">Подключенные счета</string>
+    
+    <!-- Transactions -->
+    <string name="transactions_title">Транзакции</string>
+    <string name="no_transactions">Нет транзакций</string>
+    <string name="no_transactions_subtitle">Транзакции появятся здесь после подключения банков</string>
+    <string name="search_transactions">Поиск транзакций...</string>
+    <string name="filters">Фильтры</string>
+    
+    <!-- Analytics -->
+    <string name="analytics_title">Аналитика</string>
+    <string name="income">Доходы</string>
+    <string name="expenses">Расходы</string>
+    <string name="spending_chart">График трат</string>
+    <string name="by_categories">По категориям</string>
+    <string name="chart_placeholder">График будет здесь</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="profile_section">Профиль</string>
+    <string name="username">Имя пользователя</string>
+    <string name="email">Email</string>
+    <string name="appearance_section">Внешний вид</string>
+    <string name="dark_theme">Темная тема</string>
+    <string name="language">Язык</string>
+    <string name="language_russian">Русский</string>
+    <string name="security_section">Безопасность</string>
+    <string name="biometric_auth">Биометрическая аутентификация</string>
+    <string name="change_pin">Изменить PIN</string>
+    <string name="notifications_section">Уведомления</string>
+    <string name="push_notifications">Push-уведомления</string>
+    <string name="about_section">О приложении</string>
+    <string name="version">Версия</string>
+    <string name="logout">Выйти</string>
+    
+    <!-- Bank Connection -->
+    <string name="bank_connection_title">Подключение банков</string>
+    <string name="connect_banks">Подключите банки</string>
+    <string name="connect_banks_subtitle">Подключите свои банковские счета через безопасное OAuth2 подключение</string>
+    <string name="available_banks">Доступные банки</string>
+    <string name="connected">Подключено</string>
+    <string name="connect">Подключить</string>
+    <string name="manage">Управление</string>
+    
+    <!-- Biometric Auth -->
+    <string name="biometric_title">Биометрическая аутентификация</string>
+    <string name="biometric_subtitle">Используйте отпечаток пальца или Face ID для входа</string>
+    <string name="cancel">Отмена</string>
+    <string name="use_pin">Использовать PIN</string>
+    
+    <!-- Account Types -->
+    <string name="account_type_checking">Текущий счет</string>
+    <string name="account_type_savings">Сберегательный счет</string>
+    <string name="account_type_credit">Кредитный счет</string>
+    <string name="account_type_debit_card">Дебетовая карта</string>
+    <string name="account_type_credit_card">Кредитная карта</string>
+    <string name="account_inactive">Неактивен</string>
+</resources>

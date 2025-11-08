@@ -1,0 +1,59 @@
+{
+  "transactions": [
+    {
+      "id": "trx_001",
+      "account_id": "acc_001",
+      "bank_id": "bank_vtb",
+      "amount": "-1500.00",
+      "currency": "RUB",
+      "type": "expense",
+      "category": "Продукты",
+      "description": "Покупка в магазине",
+      "date": "2024-01-15T10:30:00.000Z",
+      "merchant_name": "Магнит",
+      "reference": "REF123456"
+    },
+    {
+      "id": "trx_002",
+      "account_id": "acc_001",
+      "bank_id": "bank_vtb",
+      "amount": "50000.00",
+      "currency": "RUB",
+      "type": "income",
+      "category": "Зарплата",
+      "description": "Зарплата за январь",
+      "date": "2024-01-10T08:00:00.000Z",
+      "merchant_name": null,
+      "reference": "SAL202401"
+    },
+    {
+      "id": "trx_003",
+      "account_id": "acc_003",
+      "bank_id": "bank_sber",
+      "amount": "-2500.00",
+      "currency": "RUB",
+      "type": "expense",
+      "category": "Транспорт",
+      "description": "Оплата проезда",
+      "date": "2024-01-14T18:45:00.000Z",
+      "merchant_name": "Метро",
+      "reference": "METRO001"
+    },
+    {
+      "id": "trx_004",
+      "account_id": "acc_002",
+      "bank_id": "bank_vtb",
+      "amount": "-5000.00",
+      "currency": "RUB",
+      "type": "transfer",
+      "category": "Перевод",
+      "description": "Перевод на другой счет",
+      "date": "2024-01-12T14:20:00.000Z",
+      "merchant_name": null,
+      "reference": "TRF001"
+    }
+  ]
+}
+
+
+

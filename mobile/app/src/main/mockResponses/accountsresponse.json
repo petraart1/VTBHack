@@ -1,0 +1,37 @@
+{
+  "accounts": [
+    {
+      "id": "acc_001",
+      "bank_id": "bank_vtb",
+      "account_number": "40817810099910004312",
+      "account_type": "checking",
+      "balance": "125000.50",
+      "currency": "RUB",
+      "name": "Основной счет",
+      "is_active": true
+    },
+    {
+      "id": "acc_002",
+      "bank_id": "bank_vtb",
+      "account_number": "40817810099910004313",
+      "account_type": "savings",
+      "balance": "500000.00",
+      "currency": "RUB",
+      "name": "Накопительный счет",
+      "is_active": true
+    },
+    {
+      "id": "acc_003",
+      "bank_id": "bank_sber",
+      "account_number": "40817810088820001234",
+      "account_type": "debit_card",
+      "balance": "35000.75",
+      "currency": "RUB",
+      "name": "Дебетовая карта",
+      "is_active": true
+    }
+  ]
+}
+
+
+
