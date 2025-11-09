@@ -42,8 +42,9 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}/mobile:/app/mobile \
             -v gradle_cache:/app/.gradle \
-            -v ${{ github.workspace }}/output:/output \
             android-builder:latest
+          
+          cp ${{ github.workspace }}/mobile/app/build/outputs/apk/debug/app-debug.apk ${{ github.workspace }}/output/
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
