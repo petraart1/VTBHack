@@ -68,3 +68,5 @@ ENV GRADLE_OPTS="-Xmx4096m -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4
 RUN cd mobile && ./gradlew assembleDebug test --info
 
 # Результаты находятся в mobile/app/build/outputs/apk/debug/app-debug.apk
+RUN mkdir -p /output && \
+    cp /app/mobile/app/build/outputs/apk/debug/app-debug.apk /output/

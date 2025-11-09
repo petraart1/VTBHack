@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     
     permissions:
-      contents: write  # для создания релизов
+      contents: write
 
     steps:
       - name: Checkout code
@@ -31,17 +31,18 @@ jobs:
           context: .
           file: ./mobile/Dockerfile
           push: false
-          load: true  # загружаем образ локально для использования
+          load: true
           tags: android-builder:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build APK
         run: |
+          mkdir -p ${{ github.workspace }}/output
           docker run --rm \
             -v ${{ github.workspace }}/mobile:/app/mobile \
             -v gradle_cache:/app/.gradle \
-            -v ${{ github.workspace }}/mobile/app/build:/app/mobile/app/build \
+            -v ${{ github.workspace }}/output:/output \
             android-builder:latest
 
       - name: Upload APK artifacts
@@ -49,14 +50,14 @@ jobs:
         if: success()
         with:
           name: debug-apk
-          path: mobile/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ github.workspace }}/output/app-debug.apk
           retention-days: 5
 
       - name: Create Release on tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
-          files: mobile/app/build/outputs/apk/debug/app-debug.apk
+          files: ${{ github.workspace }}/output/app-debug.apk
           draft: false
           prerelease: false
         env:
