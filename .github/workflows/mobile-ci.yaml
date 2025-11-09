@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'mobile/**'
-      - '.github/workflows/docker-compose.yml'
+      - '.github/workflows/mobile-ci.yaml'
     branches:
       - main
   pull_request:
@@ -29,7 +29,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./mobile/Dockerfile
           push: false
           load: true  # загружаем образ локально для использования
           tags: android-builder:latest
