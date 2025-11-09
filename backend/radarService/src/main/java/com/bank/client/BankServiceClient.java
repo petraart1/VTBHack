@@ -82,7 +82,7 @@ public class BankServiceClient {
     /**
      * Получить все транзакции пользователя за период
      */
-    
+
     public List<TransactionDto> getAllUserTransactions(
             LocalDateTime from,
             LocalDateTime to,
@@ -91,6 +91,7 @@ public class BankServiceClient {
         log.info("Fetching all transactions from {} to {}", from, to);
 
         // 1. Получаем все счета пользователя
+        
         List<AccountDto> accounts = getAccounts(jwtToken);
 
         if (accounts == null || accounts.isEmpty()) {
