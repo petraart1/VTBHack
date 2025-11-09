@@ -1,7 +1,6 @@
 ---
 - name: Deploy Backend Services with 3 DBs
   hosts: production
-  become: yes
   gather_facts: yes
   
   vars_files:
@@ -16,9 +15,9 @@
           Deploy dir: {{ deploy_dir }}
           
           Services:
-          - Auth: {{ authService_version }}
-          - Bank: {{ bankService_version }}
-          - Radar: {{ radarService_version }}
+          - Auth: {{ authservice_version }}
+          - Bank: {{ bankservice_version }}
+          - Radar: {{ radarservice_version }}
 
     - name: Check Docker
       command: docker --version
@@ -42,10 +41,10 @@
         - logs/bank
         - logs/radar
 
-    - name: Copy docker-compose.yml
+    - name: Copy docker compose.yml
       template:
         src: ../templates/docker-compose.prod.j2
-        dest: "{{ deploy_dir }}/docker-compose.yml"
+        dest: "{{ deploy_dir }}/docker compose.yml"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: '0644'
@@ -71,15 +70,15 @@
         docker pull {{ registry_url }}/{{ registry_prefix }}/{{ item }}:{{ hostvars[inventory_hostname][item + '_version'] }}
       become_user: "{{ deploy_user }}"
       loop:
-        - authService
-        - bankService
-        - radarService
+        - authservice
+        - bankservice
+        - radarservice
       ignore_errors: yes
 
     - name: Stop old containers
       shell: |
         cd {{ deploy_dir }}
-        docker-compose down --timeout 30 2>/dev/null || true
+        docker compose down --timeout 30 2>/dev/null || true
       become_user: "{{ deploy_user }}"
       environment:
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
@@ -88,7 +87,7 @@
     - name: Start new containers
       shell: |
         cd {{ deploy_dir }}
-        docker-compose up -d --remove-orphans --force-recreate
+        docker compose up -d --remove-orphans --force-recreate
       become_user: "{{ deploy_user }}"
       environment:
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
@@ -110,7 +109,7 @@
       register: uri_result
 
     - name: Get container status
-      shell: "cd {{ deploy_dir }} && docker-compose ps"
+      shell: "cd {{ deploy_dir }} && docker compose ps"
       become_user: "{{ deploy_user }}"
       register: container_status
       changed_when: false
