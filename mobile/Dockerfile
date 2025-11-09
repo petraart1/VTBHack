@@ -43,28 +43,19 @@ FROM android-sdk AS builder
 
 WORKDIR /app
 
-# Копируем только gradle-related файлы для кэширования зависимостей
 COPY mobile/gradle ./mobile/gradle
 COPY mobile/gradlew ./mobile/
 COPY mobile/build.gradle.kts ./mobile/
 COPY mobile/settings.gradle.kts ./mobile/
 COPY mobile/gradle.properties ./mobile/
 
-RUN chmod +x mobile/gradlew
+RUN chmod +x ./mobile/gradlew
 
-# Кэшируем gradle зависимости (этот слой переиспользуется если gradle-файлы не изменились)
 RUN cd mobile && ./gradlew --version
 
-# Копируем весь исходный код
 COPY mobile ./mobile
 
-RUN chmod +x mobile/gradlew
+RUN chmod +x ./mobile/gradlew
 
-# Переменные окружения
 ENV GRADLE_USER_HOME=/app/.gradle
 ENV GRADLE_OPTS="-Xmx4096m -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4"
-
-# Сборка APK и тесты
-RUN cd mobile && ./gradlew assembleDebug test --info
-
-# Результаты находятся в mobile/app/build/outputs/apk/debug/app-debug.apk
