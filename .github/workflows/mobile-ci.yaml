@@ -38,6 +38,7 @@ jobs:
 
       - name: Build APK
         run: |
+          chmod +x ${{ github.workspace }}/mobile/gradlew
           docker run --rm \
             -v ${{ github.workspace }}/mobile:/app/mobile \
             -v gradle_cache:/app/.gradle \
