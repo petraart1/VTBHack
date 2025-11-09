@@ -50,7 +50,7 @@
     - name: Copy docker-compose.yml
       template:
         src: ../templates/docker-compose.prod.j2
-        dest: "{{ deploy_dir }}/docker compose.yml"
+        dest: "{{ deploy_dir }}/docker-compose.yml"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: '0644'
