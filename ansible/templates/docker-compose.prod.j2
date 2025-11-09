@@ -77,7 +77,7 @@ services:
 
   # Auth Service
   auth:
-    image: {{ registry_url }}/{{ registry_prefix }}/authService:{{ authService_version }}
+    image: {{ registry_url }}/{{ registry_prefix }}/authservice:{{ authservice_version }}
     restart: always
     container_name: {{ compose_project_name }}_auth
     ports:
@@ -105,7 +105,7 @@ services:
 
   # Bank Service
   bank:
-    image: {{ registry_url }}/{{ registry_prefix }}/bankService:{{ bankService_version }}
+    image: {{ registry_url }}/{{ registry_prefix }}/bankservice:{{ bankservice_version }}
     restart: always
     container_name: {{ compose_project_name }}_bank
     ports:
@@ -139,7 +139,7 @@ services:
 
   # Radar Service
   radar:
-    image: {{ registry_url }}/{{ registry_prefix }}/radarService:{{ radarService_version }}
+    image: {{ registry_url }}/{{ registry_prefix }}/radarservice:{{ radarservice_version }}
     restart: always
     container_name: {{ compose_project_name }}_radar
     ports:
