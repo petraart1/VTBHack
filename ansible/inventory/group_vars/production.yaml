@@ -25,9 +25,9 @@ radar_url: "http://radar:8082"
 # Registry
 registry_url: ghcr.io
 registry_prefix: petraart1/vtbhack
-authService_version: "main-latest"
-bankService_version: "main-latest"
-radarService_version: "main-latest"
+authservice_version: "main-latest"
+bankservice_version: "main-latest"
+radarservice_version: "main-latest"
 
 # Logging
 logging_level_root: "INFO"

@@ -149,9 +149,9 @@ jobs:
           IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
           PROD_FILE="ansible/inventory/group_vars/production.yaml"
           
-          sed -i "s/authService_version: .*/authService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
-          sed -i "s/bankService_version: .*/bankService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
-          sed -i "s/radarService_version: .*/radarService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+          sed -i "s/authservice_version: .*/authservice_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+          sed -i "s/bankservice_version: .*/bankservice_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+          sed -i "s/radarservice_version: .*/radarservice_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
           
       - name: Debug Ansible inventory
         run: |
