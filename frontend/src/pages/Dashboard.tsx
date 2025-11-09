@@ -1,179 +1,78 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { Bank } from '../types';
+import { bankApi, AccountDto } from '../lib/api/bank';
 import { BankCard } from '../components/BankCard';
 import { LogOut, Wallet, List } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
+
+// Адаптер для преобразования AccountDto в Bank (для совместимости с BankCard)
+interface Bank {
+  id: string;
+  user_id: string;
+  bank_name: string;
+  card_number: string;
+  card_type: string;
+  balance: number;
+  currency: string;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+function accountToBank(account: AccountDto): Bank {
+  // Маппинг цветов для разных банков
+  const bankColors: Record<string, string> = {
+    vbank: 'blue',
+    abank: 'purple',
+    sbank: 'green',
+  };
+
+  return {
+    id: account.id,
+    user_id: account.id, // Временное значение
+    bank_name: account.bank_id.toUpperCase(),
+    card_number: account.account_number_masked || '**** **** **** ****',
+    card_type: account.account_type || 'CARD',
+    balance: Number(account.available_balance || account.booked_balance || 0),
+    currency: account.currency || 'RUB',
+    color: bankColors[account.bank_id.toLowerCase()] || 'gradient',
+    is_active: account.status === 'ACTIVE',
+    created_at: account.created_at,
+    updated_at: account.last_sync_at || account.created_at,
+  };
+}
 
 export const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [banks, setBanks] = useState<Bank[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadData();
+    if (user) {
+      loadData();
+    } else {
+      setLoading(false);
+    }
   }, [user]);
 
   const loadData = async () => {
     if (!user) return;
 
     try {
-      const { data: banksData } = await supabase
-        .from('banks')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: true });
-
-      if (banksData && banksData.length === 0) {
-        await seedMockData();
-      } else {
-        setBanks(banksData || []);
-      }
+      setError(null);
+      const accounts = await bankApi.getAccounts();
+      const banksData = accounts.map(accountToBank);
+      setBanks(banksData);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading accounts:', error);
+      setError('Не удалось загрузить счета. Убедитесь, что вы подключили банк.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const seedMockData = async () => {
-    if (!user) return;
-
-    const mockBanks = [
-      {
-        user_id: user.id,
-        bank_name: 'Сбербанк',
-        card_number: '4532123456789749',
-        card_type: 'VISA',
-        balance: 15430.50,
-        currency: 'RUB',
-        color: 'gradient',
-      },
-      {
-        user_id: user.id,
-        bank_name: 'ВТБ',
-        card_number: '5425233430109903',
-        card_type: 'MasterCard',
-        balance: 8920.75,
-        currency: 'RUB',
-        color: 'blue',
-      },
-      {
-        user_id: user.id,
-        bank_name: 'Альфа-Банк',
-        card_number: '4716347184862961',
-        card_type: 'VISA',
-        balance: -250.00,
-        currency: 'RUB',
-        color: 'purple',
-      },
-    ];
-
-    const { data: insertedBanks } = await supabase
-      .from('banks')
-      .insert(mockBanks)
-      .select();
-
-    if (insertedBanks && insertedBanks.length > 0) {
-      // Полный замоканный JSON с данными о транзакциях
-      const mockTransactionsData = [
-        {
-          type: 'cash-in',
-          amount: 500.00,
-          fromPerson: 'Иван Петров',
-          fromBank: 'ABC Банк',
-          status: 'confirmed',
-          hoursAgo: 2,
-        },
-        {
-          type: 'purchase',
-          amount: 175.50,
-          store: 'Магазин',
-          status: 'confirmed',
-          hoursAgo: 5,
-        },
-        {
-          type: 'transfer',
-          amount: 9000.00,
-          toPerson: 'Мария Сидорова',
-          toBank: 'XYZ Кредит',
-          status: 'confirmed',
-          hoursAgo: 24,
-        },
-        {
-          type: 'transfer',
-          amount: 9267.00,
-          toPerson: 'Петр Иванов',
-          toBank: 'Global Финанс',
-          status: 'cancelled',
-          hoursAgo: 48,
-          reason: 'Недостаточно средств',
-        },
-        {
-          type: 'cash-in',
-          amount: 350.00,
-          fromPerson: 'Анна Смирнова',
-          fromBank: 'Тинькофф',
-          status: 'confirmed',
-          hoursAgo: 72,
-        },
-        {
-          type: 'cash-out',
-          amount: 2500.00,
-          fromBank: 'Сбербанк',
-          status: 'confirmed',
-          hoursAgo: 96,
-        },
-        {
-          type: 'transfer',
-          amount: 15000.00,
-          toPerson: 'Елена Козлова',
-          toBank: 'Альфа-Банк',
-          status: 'pending',
-          hoursAgo: 120,
-        },
-        {
-          type: 'purchase',
-          amount: 999.99,
-          store: 'Супермаркет',
-          status: 'confirmed',
-          hoursAgo: 144,
-        },
-      ];
-
-      const mockTransactions = mockTransactionsData.map((tx, index) => {
-        let description = '';
-        if (tx.type === 'cash-in') {
-          description = `Пополнение от ${tx.fromPerson}, ${tx.fromBank}`;
-        } else if (tx.type === 'transfer') {
-          description = tx.reason 
-            ? `Перевод ${tx.toPerson}, ${tx.toBank} - ${tx.reason}`
-            : `Перевод ${tx.toPerson}, ${tx.toBank}`;
-        } else if (tx.type === 'cash-out') {
-          description = `Снятие наличных в банкомате ${tx.fromBank}`;
-        } else if (tx.type === 'purchase') {
-          description = `Кэшбэк за покупку в ${tx.store}`;
-        }
-
-        return {
-          user_id: user.id,
-          bank_id: insertedBanks[index % insertedBanks.length].id,
-          transaction_type: tx.type,
-          amount: tx.amount,
-          description: description,
-          status: tx.status,
-          transaction_date: new Date(Date.now() - tx.hoursAgo * 60 * 60 * 1000).toISOString(),
-        };
-      });
-
-      await supabase.from('transactions').insert(mockTransactions);
-    }
-
-    await loadData();
   };
 
   const getTotalBalance = () => {
@@ -186,10 +85,10 @@ export const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Загрузка...</p>
+          <p className="text-gray-600 dark:text-gray-300">Загрузка...</p>
         </div>
       </div>
     );
@@ -201,17 +100,24 @@ export const Dashboard = () => {
         <div className="flex justify-between items-center mb-8">
           <div className="grid items-center grid-cols-[auto_1fr] gap-4">
             <div className="h-16 w-16 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white flex items-center justify-center font-semibold text-2xl dark:from-blue-500 dark:to-purple-500">
-              {(((user?.user_metadata as any)?.full_name || user?.email || 'U') as string).charAt(0).toUpperCase()}
+              {((user?.firstName || user?.email || 'U') as string).charAt(0).toUpperCase()}
             </div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-              Z-Банк
+              Мультибанк
             </h1>
             <div></div>
-            <p className="text-gray-600 dark:text-gray-300 mt-[-23px]">{(user?.user_metadata as any)?.full_name || user?.email}</p>
+            <p className="text-gray-600 dark:text-gray-300 mt-[-23px]">
+              {user?.firstName && user?.lastName
+                ? `${user.firstName} ${user.lastName}`
+                : user?.email}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <Link to="/transactions" className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-500 rounded-lg shadow text-white hover:from-blue-700 hover:to-purple-700 transition hover:shadow-md">
+            <Link
+              to="/transactions"
+              className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-500 rounded-lg shadow text-white hover:from-blue-700 hover:to-purple-700 transition hover:shadow-md"
+            >
               <List className="w-4 h-4" />
               Все операции
             </Link>
@@ -233,21 +139,44 @@ export const Dashboard = () => {
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Общий баланс</p>
               <p className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-                {getTotalBalance().toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+                {getTotalBalance().toLocaleString('ru-RU', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{' '}
+                ₽
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent mb-4">Ваши карты</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {banks.map((bank) => (
-              <div key={bank.id} onClick={() => handleCardClick(bank)} className="cursor-pointer">
-                <BankCard bank={bank} />
-              </div>
-            ))}
+        {error && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400 px-4 py-3 rounded-lg mb-4">
+            {error}
           </div>
+        )}
+
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent mb-4">
+            Ваши счета
+          </h2>
+          {banks.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 text-center">
+              <p className="text-gray-600 dark:text-gray-300 mb-4">
+                У вас пока нет подключенных счетов
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Подключите банк через API для просмотра счетов и транзакций
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {banks.map((bank) => (
+                <div key={bank.id} onClick={() => handleCardClick(bank)} className="cursor-pointer">
+                  <BankCard bank={bank} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
