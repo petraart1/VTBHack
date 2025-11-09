@@ -155,7 +155,16 @@ jobs:
 
       - name: Run Ansible playbook
         run: |
-          ansible-playbook -i ansible/inventory/hosts.yaml ansible/playbooks/deploy-backend.yaml --vault-password-file ~/.ansible_vault_pass --limit production -e "ansible_host=${{ secrets.PRODUCTION_SERVER_IP }}" -vv
+          ansible-playbook \
+          -i ansible/inventory/hosts.yaml \
+          ansible/playbooks/deploy-backend.yaml \
+          --vault-password-file ~/.ansible_vault_pass \
+          --limit production \
+          -vv
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          ANSIBLE_CONFIG: ansible/ansible.cfg
+
 
       - name: Verify deployment
         run: |
