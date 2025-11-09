@@ -100,7 +100,7 @@
       until: result.rc == 0
       loop: "{{ services }}"
       loop_control:
-      label: "{{ item }}"
+        label: "{{ item }}"
 
 
 

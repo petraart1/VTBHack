@@ -82,6 +82,7 @@ public class BankServiceClient {
     /**
      * Получить все транзакции пользователя за период
      */
+    
     public List<TransactionDto> getAllUserTransactions(
             LocalDateTime from,
             LocalDateTime to,
