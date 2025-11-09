@@ -40,8 +40,14 @@
         - logs/auth
         - logs/bank
         - logs/radar
-
-    - name: Copy docker compose.yml
+    
+    - name: Remove old docker-compose.yml
+      file:
+        path: "{{ deploy_dir }}/docker-compose.yml"
+        state: absent
+      become_user: "{{ deploy_user }}"
+      
+    - name: Copy docker-compose.yml
       template:
         src: ../templates/docker-compose.prod.j2
         dest: "{{ deploy_dir }}/docker compose.yml"
