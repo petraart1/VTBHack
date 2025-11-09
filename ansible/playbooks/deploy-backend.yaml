@@ -84,28 +84,24 @@
       register: recreate_result
 
     - name: Wait for microservices to become healthy
-      hosts: backend-prod
-      gather_facts: false
-      tasks:
-        - name: Check microservice health inside container
-          vars:
-            services:
-              - name: authservice
-                port: 8080
-              - name: bankservice
-                port: 8080
-              - name: radarservice
-                port: 8080
-          ansible.builtin.shell: |
-            docker exec {{ item.name }} \
-            sh -c "curl -f http://localhost:{{ item.port }}/actuator/health || exit 1"
-          register: result
-          retries: 30
-          delay: 5
-          until: result.rc == 0
-          loop: "{{ services }}"
-          loop_control:
-            label: "{{ item.name }}"
+      vars:
+        services:
+          - name: authservice
+            port: 8080
+          - name: bankservice
+            port: 8080
+          - name: radarservice
+            port: 8080
+      ansible.builtin.shell: |
+        docker exec {{ item.name }} \
+        sh -c "curl -f http://localhost:{{ item.port }}/actuator/health || exit 1"
+      register: result
+      retries: 30
+      delay: 5
+      until: result.rc == 0
+      loop: "{{ services }}"
+      loop_control:
+        label: "{{ item.name }}"
 
 
     - name: Get container status
