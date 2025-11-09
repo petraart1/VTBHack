@@ -1,0 +1,2 @@
+jwt:
+  secret: test-secret-key-for-jwt-token-generation-minimum-256-bits-required-for-security-please-use-long-enough-secret-key-in-production

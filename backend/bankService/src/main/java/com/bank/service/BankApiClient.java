@@ -204,6 +204,7 @@ public class BankApiClient {
 
         String url = bankConfig.getBaseUrl() + bankConfig.getTransactionsEndpoint()
                 .replace("{accountId}", accountId.toString()) + "?client_id=" + clientId;
+        // Примечание: для реактивной версии можно добавить параметры from_booking_date_time и to_booking_date_time
 
         String teamId = extractTeamIdFromClientId(clientId);
         log.info("fetching transactions reactively from bank={} for user={}, account={}, client_id={}, team_id={}, consent_id={}",
@@ -446,6 +447,31 @@ public class BankApiClient {
             String accountId,
             LocalDateTime from,
             LocalDateTime to) {
+        return getTransactions(userId, credentials, accountId, from, to, 1, 50);
+    }
+
+    /**
+     * Получение транзакций по счету с пагинацией
+     * 
+     * @param userId ID пользователя
+     * @param credentials Учетные данные банка
+     * @param accountId ID счета во внешнем банке
+     * @param from Начало периода
+     * @param to Конец периода
+     * @param page Номер страницы (default: 1)
+     * @param limit Количество транзакций на странице (default: 50, max: 500)
+     * @return Список транзакций
+     */
+    @Retry(name = "bankApi", fallbackMethod = "getTransactionsFallback")
+    @CircuitBreaker(name = "bankApi", fallbackMethod = "getTransactionsFallback")
+    public ExternalTransactionResponseDto getTransactions(
+            UUID userId,
+            BankCredentials credentials,
+            String accountId,
+            LocalDateTime from,
+            LocalDateTime to,
+            int page,
+            int limit) {
         
         BankProperties.BankConfig bankConfig = getBankConfig(credentials.bankId());                                                                             
         String accessToken = tokenService.getAccessToken(userId, credentials);
@@ -459,10 +485,16 @@ public class BankApiClient {
         // Получаем consent_id для межбанкового запроса
         String consentId = consentService.getConsentId(userId, credentials, clientId);
         
+        // Валидация параметров пагинации согласно документации
+        int validPage = Math.max(1, page);
+        int validLimit = Math.min(Math.max(1, limit), 500);  // min: 1, max: 500
+        
         String endpoint = bankConfig.getTransactionsEndpoint().replace("{accountId}", accountId);                                                               
         String url = bankConfig.getBaseUrl() + endpoint +
-                "?from=" + from.format(BankingConstants.ISO_FORMATTER) +
-                "&to=" + to.format(BankingConstants.ISO_FORMATTER) +
+                "?from_booking_date_time=" + from.format(BankingConstants.ISO_FORMATTER) +
+                "&to_booking_date_time=" + to.format(BankingConstants.ISO_FORMATTER) +
+                "&page=" + validPage +
+                "&limit=" + validLimit +
                 "&client_id=" + clientId;
         
         // Извлекаем teamId для заголовков
@@ -698,11 +730,20 @@ public class BankApiClient {
     }
 
     /**
-     * Fallback для getTransactions
+     * Fallback для getTransactions (перегрузка без пагинации)
      */
     private ExternalTransactionResponseDto getTransactionsFallback(
             UUID userId, BankCredentials credentials, String accountId,
             LocalDateTime from, LocalDateTime to, Exception e) {
+        return getTransactionsFallback(userId, credentials, accountId, from, to, 1, 50, e);
+    }
+
+    /**
+     * Fallback для getTransactions (с пагинацией)
+     */
+    private ExternalTransactionResponseDto getTransactionsFallback(
+            UUID userId, BankCredentials credentials, String accountId,
+            LocalDateTime from, LocalDateTime to, int page, int limit, Exception e) {
         
         log.error("fallback: getTransactions failed for user={}, bank={}, account={}, error={}",
                 userId, credentials.bankId(), accountId, e.getMessage());

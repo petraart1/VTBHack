@@ -83,20 +83,30 @@
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
       register: recreate_result
 
-    - name: Wait for services to become healthy
-      uri:
-        url: "http://localhost:{{ item }}/actuator/health"
-        method: GET
-        status_code: 200
-      register: uri_result
-      retries: 30
-      delay: 2
-      until: uri_result.status == 200
-      loop:
-        - "{{ auth_port }}"
-        - "{{ bank_port }}"
-        - "{{ radar_port }}"
-      ignore_errors: yes
+    - name: Wait for microservices to become healthy
+      hosts: backend-prod
+      gather_facts: false
+      tasks:
+        - name: Check microservice health inside container
+          vars:
+            services:
+              - name: authservice
+                port: 8080
+              - name: bankservice
+                port: 8080
+              - name: radarservice
+                port: 8080
+          ansible.builtin.shell: |
+            docker exec {{ item.name }} \
+            sh -c "curl -f http://localhost:{{ item.port }}/actuator/health || exit 1"
+          register: result
+          retries: 30
+          delay: 5
+          until: result.rc == 0
+          loop: "{{ services }}"
+          loop_control:
+            label: "{{ item.name }}"
+
 
     - name: Get container status
       shell: "cd {{ deploy_dir }} && docker compose ps"

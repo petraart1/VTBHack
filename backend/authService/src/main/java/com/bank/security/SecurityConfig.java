@@ -33,7 +33,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/auth/register", "/auth/login").permitAll()                                                                           
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll() // Swagger UI
+                        .requestMatchers("bank/swagger-ui/**", "bank/swagger-ui.html", "bank/api-docs/**", "bank/v3/api-docs/**").permitAll() // Swagger UI
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

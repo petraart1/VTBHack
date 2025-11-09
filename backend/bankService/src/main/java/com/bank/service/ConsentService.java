@@ -114,7 +114,7 @@ public class ConsentService {
             ConsentResponseDto response = bankRestClient.post()
                     .uri(url)
                     .header("Authorization", "Bearer " + accessToken)
-                    .header("X-Requesting-Bank", credentials.username())
+                    .header("X-Requesting-Bank", teamId)  // Используем teamXXX, а не username
                     .header("X-Request-ID", UUID.randomUUID().toString())
                     .body(requestDto)
                     .retrieve()

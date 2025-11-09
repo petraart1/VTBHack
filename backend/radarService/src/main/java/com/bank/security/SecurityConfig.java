@@ -31,7 +31,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
                         .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/api-docs/**").permitAll()
+                        .requestMatchers("radar/swagger-ui/**", "radar/v3/api-docs/**", "radar/swagger-ui.html", "radar/api-docs/**").permitAll()
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 )
