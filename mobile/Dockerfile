@@ -50,6 +50,8 @@ COPY mobile/build.gradle.kts ./mobile/
 COPY mobile/settings.gradle.kts ./mobile/
 COPY mobile/gradle.properties ./mobile/
 
+RUN chmod +x mobile/gradlew
+
 # Кэшируем gradle зависимости (этот слой переиспользуется если gradle-файлы не изменились)
 RUN cd mobile && ./gradlew --version
 
