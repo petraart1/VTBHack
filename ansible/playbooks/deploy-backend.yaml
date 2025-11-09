@@ -131,6 +131,6 @@
           ✅ Deployment successful!
           
           Services:
-          - Auth: http://{{ ansible_host }}:{{ auth_port }}/actuator/health
-          - Bank: http://{{ ansible_host }}:{{ bank_port }}/actuator/health
-          - Radar: http://{{ ansible_host }}:{{ radar_port }}/actuator/health
+          - Auth: http://\{\{ ansible_host }}:{{ auth_port }}/actuator/health
+          - Bank: http://\{\{ ansible_host }}:{{ bank_port }}/actuator/health
+          - Radar: http://\{\{ ansible_host }}:{{ radar_port }}/actuator/health
