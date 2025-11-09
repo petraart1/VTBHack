@@ -152,6 +152,17 @@ jobs:
           sed -i "s/authService_version: .*/authService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
           sed -i "s/bankService_version: .*/bankService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
           sed -i "s/radarService_version: .*/radarService_version: \"$IMAGE_TAG\"/" "$PROD_FILE"
+          
+      - name: Debug Ansible inventory
+        run: |
+          echo "=== hosts.yaml ==="
+          cat ansible/inventory/hosts.yaml
+          echo ""
+          echo "=== SSH key check ==="
+          ls -la ~/.ssh/deploy_key 2>/dev/null || echo "SSH key not found"
+          echo ""
+          echo "=== Ansible version ==="
+          ansible --version
 
       - name: Run Ansible playbook
         run: |
