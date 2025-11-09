@@ -41,11 +41,15 @@
         - logs/bank
         - logs/radar
     
-    - name: Remove old docker-compose.yml
-      file:
-        path: "{{ deploy_dir }}/docker-compose.yml"
-        state: absent
+    - name: Stop and remove all containers
+      shell: |
+        cd {{ deploy_dir }}
+        docker compose down --timeout 30 --remove-orphans 2>/dev/null || true
+        docker system prune -f 2>/dev/null || true
       become_user: "{{ deploy_user }}"
+      environment:
+        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
+
       
     - name: Copy docker-compose.yml
       template:
