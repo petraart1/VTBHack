@@ -86,22 +86,22 @@
     - name: Wait for microservices to become healthy
       vars:
         services:
-          - name: authservice
-            port: 8080
-          - name: bankservice
-            port: 8080
-          - name: radarservice
-            port: 8080
+          - auth
+          - bank
+          - radar
       ansible.builtin.shell: |
-        docker exec {{ item.name }} \
-        sh -c "curl -f http://localhost:{{ item.port }}/actuator/health || exit 1"
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' {{ item }})
+        if [ "$STATUS" != "healthy" ]; then
+          exit 1
+        fi
       register: result
       retries: 30
       delay: 5
       until: result.rc == 0
       loop: "{{ services }}"
       loop_control:
-        label: "{{ item.name }}"
+      label: "{{ item }}"
+
 
 
     - name: Get container status

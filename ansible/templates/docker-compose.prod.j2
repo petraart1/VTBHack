@@ -2,73 +2,65 @@
 version: '3.8'
 
 services:
-  # Database для Auth Service
+  # Auth Database
   auth-db:
     image: postgres:16-alpine
-    restart: always
     container_name: {{ compose_project_name }}_auth_db
+    restart: always
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}
       POSTGRES_PASSWORD: {{ vault_postgres_password }}
     volumes:
       - {{ deploy_dir }}/auth-db-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U {{ postgres_user }}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Database для Bank Service
+  # Bank Database
   bank-db:
     image: postgres:16-alpine
-    restart: always
     container_name: {{ compose_project_name }}_bank_db
+    restart: always
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}
       POSTGRES_PASSWORD: {{ vault_postgres_password }}
     volumes:
       - {{ deploy_dir }}/bank-db-data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U {{ postgres_user }}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Database для Radar Service
+  # Radar Database
   radar-db:
     image: postgres:16-alpine
-    restart: always
     container_name: {{ compose_project_name }}_radar_db
+    restart: always
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}
       POSTGRES_PASSWORD: {{ vault_postgres_password }}
     volumes:
       - {{ deploy_dir }}/radar-db-data:/var/lib/postgresql/data
-    ports:
-      - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U {{ postgres_user }}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis для caching
+  # Redis
   redis:
     image: {{ registry_url }}/{{ registry_prefix }}/infra-redis:latest
-    restart: always
     container_name: {{ compose_project_name }}_redis
+    restart: always
     command: redis-server --appendonly yes
     volumes:
       - {{ deploy_dir }}/redis-data:/data
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -78,8 +70,8 @@ services:
   # Auth Service
   auth:
     image: {{ registry_url }}/{{ registry_prefix }}/authservice:{{ authservice_version }}
-    restart: always
     container_name: {{ compose_project_name }}_auth
+    restart: always
     expose:
       - "8080"
     environment:
@@ -91,23 +83,24 @@ services:
       JWT_SECRET: {{ vault_jwt_secret }}
       SPRING_PROFILES_ACTIVE: {{ spring_profiles_active }}
       LOGGING_LEVEL_ROOT: {{ logging_level_root }}
+      SERVER_ADDRESS: 0.0.0.0
     depends_on:
       auth-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 30s
     volumes:
       - {{ deploy_dir }}/logs/auth:/app/logs
 
   # Bank Service
   bank:
     image: {{ registry_url }}/{{ registry_prefix }}/bankservice:{{ bankservice_version }}
-    restart: always
     container_name: {{ compose_project_name }}_bank
+    restart: always
     expose:
       - "8080"
     environment:
@@ -115,33 +108,34 @@ services:
       POSTGRES_USER: {{ postgres_user }}
       POSTGRES_PASSWORD: {{ vault_postgres_password }}
       BANK_DB_CONTAINER_NAME: bank-db
-      DB_PORT: 5433
+      DB_PORT: 5432
       JWT_SECRET: {{ vault_jwt_secret }}
-      REDIS_HOST: {{ redis_host }}
-      REDIS_PORT: {{ redis_port }}
-      AUTH_CONTAINER_URL: {{ auth_url }}
-      RADAR_CONTAINER_URL: {{ radar_url }}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_CONTAINER_URL: auth:8080
+      RADAR_CONTAINER_URL: radar:8080
       SPRING_PROFILES_ACTIVE: {{ spring_profiles_active }}
       LOGGING_LEVEL_ROOT: {{ logging_level_root }}
+      SERVER_ADDRESS: 0.0.0.0
     depends_on:
       bank-db:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 30s
     volumes:
       - {{ deploy_dir }}/logs/bank:/app/logs
 
   # Radar Service
   radar:
     image: {{ registry_url }}/{{ registry_prefix }}/radarservice:{{ radarservice_version }}
-    restart: always
     container_name: {{ compose_project_name }}_radar
+    restart: always
     expose:
       - "8080"
     environment:
@@ -149,33 +143,34 @@ services:
       POSTGRES_USER: {{ postgres_user }}
       POSTGRES_PASSWORD: {{ vault_postgres_password }}
       RADAR_DB_CONTAINER_NAME: radar-db
-      DB_PORT: 5434
+      DB_PORT: 5432
       JWT_SECRET: {{ vault_jwt_secret }}
-      REDIS_HOST: {{ redis_host }}
-      REDIS_PORT: {{ redis_port }}
-      AUTH_CONTAINER_URL: {{ auth_url }}
-      BANK_CONTAINER_URL: {{ bank_url }}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_CONTAINER_URL: auth:8080
+      BANK_CONTAINER_URL: bank:8080
       SPRING_PROFILES_ACTIVE: {{ spring_profiles_active }}
       LOGGING_LEVEL_ROOT: {{ logging_level_root }}
+      SERVER_ADDRESS: 0.0.0.0
     depends_on:
       radar-db:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 30s
     volumes:
       - {{ deploy_dir }}/logs/radar:/app/logs
 
   # Nginx
   nginx:
     image: {{ registry_url }}/{{ registry_prefix }}/infra-nginx:latest
-    restart: always
     container_name: {{ compose_project_name }}_nginx
+    restart: always
     ports:
       - "80:80"
       - "443:443"
@@ -187,12 +182,13 @@ services:
   # Prometheus
   prometheus:
     image: {{ registry_url }}/{{ registry_prefix }}/infra-prometheus:latest
-    restart: always
     container_name: {{ compose_project_name }}_prometheus
+    restart: always
     ports:
       - "9090:9090"
     volumes:
       - {{ deploy_dir }}/prometheus-data:/prometheus
+
 
 volumes:
   auth-db-data:
