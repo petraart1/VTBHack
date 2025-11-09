@@ -16,6 +16,3 @@ services:
     # Сборка происходит в Dockerfile CMD
     environment:
       - GRADLE_OPTS=-Xmx4096m -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4
-
-volumes:
-  gradle_cache:

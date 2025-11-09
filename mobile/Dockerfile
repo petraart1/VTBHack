@@ -44,11 +44,11 @@ FROM android-sdk AS builder
 WORKDIR /app
 
 # Копируем только gradle-related файлы для кэширования зависимостей
-COPY mobile/gradle ./mobile/gradle
-COPY mobile/gradlew ./mobile/
-COPY mobile/build.gradle.kts ./mobile/
-COPY mobile/settings.gradle.kts ./mobile/
-COPY mobile/gradle.properties ./mobile/
+COPY gradle ./gradle
+COPY gradlew ./
+COPY build.gradle.kts ./
+COPY settings.gradle.kts ./
+COPY gradle.properties ./
 
 RUN chmod +x mobile/gradlew
 
