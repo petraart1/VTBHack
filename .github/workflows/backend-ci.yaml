@@ -156,15 +156,15 @@ jobs:
       - name: Run Ansible playbook
         run: |
           ansible-playbook \
-          -i ansible/inventory/hosts.yaml \
-          ansible/playbooks/deploy-backend.yaml \
-          --vault-password-file ~/.ansible_vault_pass \
-          --limit production \
-          -u vm_0 \
-          -vv
+            -i ansible/inventory/hosts.yaml \
+            ansible/playbooks/deploy-backend.yaml \
+            --vault-password-file ~/.ansible_vault_pass \
+            --limit production \
+            -u vm_0 \
+            -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" \
+            -vv
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
-          ANSIBLE_CONFIG: ansible/ansible.cfg
 
 
       - name: Verify deployment
