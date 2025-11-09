@@ -69,4 +69,6 @@ RUN cd mobile && ./gradlew assembleDebug test --info
 
 # Результаты находятся в mobile/app/build/outputs/apk/debug/app-debug.apk
 RUN mkdir -p /output && \
-    cp /app/mobile/app/build/outputs/apk/debug/app-debug.apk /output/
+    ls -la /app/mobile/app/build/outputs/apk/debug/ && \
+    cp /app/mobile/app/build/outputs/apk/debug/app-debug.apk /output/ && \
+    ls -la /output/
