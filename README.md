@@ -142,20 +142,6 @@ API документация доступна по адресу: `http://localho
 
 ### Быстрый старт с Docker Compose
 
-**Самый простой способ:**
-
-```bash
-# Запустить скрипт автоматической настройки и запуска
-./start.sh
-```
-
-Скрипт автоматически:
-- Создаст необходимые `.env` файлы
-- Запустит все сервисы
-- Покажет статус и доступные URL
-
-**Или вручную:**
-
 1. Клонируйте репозиторий:
 ```bash
 git clone <repository-url>
@@ -166,41 +152,25 @@ cd VTBHack
 ```env
 POSTGRES_DB=bank
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres123
+POSTGRES_PASSWORD=your_secure_password
 DB_PORT=5432
 AUTH_DB_CONTAINER_NAME=auth-db
 BANK_DB_CONTAINER_NAME=bank-db
 RADAR_DB_CONTAINER_NAME=radar-db
-JWT_SECRET=34cf09cbe5571911e487cafcd49b72946a133fe881c3de75ab2d412f226ef06f
+JWT_SECRET=your_jwt_secret_key_here
 REDIS_HOST=redis
 REDIS_PORT=6379
 ```
 
-3. Создайте файл `frontend/.env`:
-```env
-VITE_API_BASE_URL=http://localhost:80
-```
-
-4. Запустите все сервисы:
+3. Запустите все сервисы:
 ```bash
 docker compose up --build
 ```
 
-5. Проверьте статус сервисов:
+4. Проверьте статус сервисов:
 ```bash
 docker compose ps
 ```
-
-### Тестирование API
-
-После запуска сервисов можно протестировать API:
-
-```bash
-# Запустить автоматические тесты API
-./test-api.sh
-```
-
-Или вручную через curl (см. подробную инструкцию в `QUICKSTART.md`).
 
 ### Доступные сервисы
 
@@ -426,7 +396,6 @@ ansible-playbook ansible/playbooks/deploy-backend.yml --ask-vault-pass
 
 ## Дополнительная документация
 
-- [QUICKSTART.md](QUICKSTART.md) — подробная инструкция по локальному запуску и тестированию
 - [Mobile README](mobile/README.md) — документация Android приложения
 - [Ansible README](ansible/README.md) — документация по развертыванию
 - [RadarService README](backend/radarService/README.md) — подробная документация сервиса аналитики
