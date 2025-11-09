@@ -120,7 +120,6 @@ public class BankServiceClient {
     }
 
     // Fallback methods
-    
     private List<AccountDto> getAccountsFallback(String jwtToken, Throwable t) {
         log.error("Failed to fetch accounts from BankService: {}", t.getMessage());
         return Collections.emptyList();
