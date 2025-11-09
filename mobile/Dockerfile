@@ -58,6 +58,8 @@ RUN cd mobile && ./gradlew --version
 # Копируем весь исходный код
 COPY mobile ./mobile
 
+RUN chmod +x mobile/gradlew
+
 # Переменные окружения
 ENV GRADLE_USER_HOME=/app/.gradle
 ENV GRADLE_OPTS="-Xmx4096m -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4"
