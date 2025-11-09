@@ -160,6 +160,7 @@ jobs:
           ansible/playbooks/deploy-backend.yaml \
           --vault-password-file ~/.ansible_vault_pass \
           --limit production \
+          -u vm_0 \
           -vv
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
