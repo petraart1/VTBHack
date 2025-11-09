@@ -74,35 +74,14 @@
         - bankservice
         - radarservice
 
-    - name: Recreate only microservice containers (no DBs)
+    - name: Recreate all containers
       shell: |
         cd {{ deploy_dir }}
-        docker compose up -d --no-deps --force-recreate --remove-orphans auth bank radar
+        docker compose up -d --remove-orphans
       become_user: "{{ deploy_user }}"
       environment:
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
       register: recreate_result
-
-    - name: Wait for microservices to become healthy
-      vars:
-        services:
-          - auth
-          - bank
-          - radar
-      ansible.builtin.shell: |
-        STATUS=$(docker inspect --format='{{.State.Health.Status}}' {{ item }})
-        if [ "$STATUS" != "healthy" ]; then
-          exit 1
-        fi
-      register: result
-      retries: 30
-      delay: 5
-      until: result.rc == 0
-      loop: "{{ services }}"
-      loop_control:
-        label: "{{ item }}"
-
-
 
     - name: Get container status
       shell: "cd {{ deploy_dir }} && docker compose ps"
