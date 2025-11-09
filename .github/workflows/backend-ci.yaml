@@ -2,14 +2,16 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [aboba]
     paths:
-      - 'backend/**'
-      - '.github/workflows/backend-ci.yaml'
+      #- 'backend/**'
+      #- '.github/workflows/backend-ci.yaml'
+      - 'aboba'
   pull_request:
-    branches: [main, develop]
+    branches: [aboba]
     paths:
-      - 'backend/**'
+      #- 'backend/**'
+      - 'aboba'
 
 env:
   REGISTRY: ghcr.io
