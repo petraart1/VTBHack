@@ -4,42 +4,53 @@ import { Chrome } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export const Register = () => {
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [birthOfDate, setBirthOfDate] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp, signInWithGitHub } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Пароли не совпадают');
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError('Пароль должен содержать минимум 6 символов');
+      return;
+    }
+
+    if (!birthOfDate) {
+      setError('Укажите дату рождения');
       return;
     }
 
     setLoading(true);
-    const { error } = await signUp(email, password, fullName);
+    const { error } = await signUp(email, password, firstName, lastName, birthOfDate);
     if (error) {
       setError(error.message);
+    } else {
+      // После успешной регистрации перенаправляем на страницу входа
+      window.location.href = '/login';
     }
     setLoading(false);
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGitHubSignIn = async () => {
     setError('');
     setLoading(true);
-    const { error } = await signInWithGoogle();
-    if (error) {
-      setError(error.message);
+    try {
+      await signInWithGitHub();
+    } catch (error) {
+      setError((error as Error).message || 'Ошибка при входе через GitHub');
     }
     setLoading(false);
   };
@@ -65,17 +76,46 @@ export const Register = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Имя и фамилия
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Имя
             </label>
             <input
-              id="fullName"
+              id="firstName"
               type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
               required
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-purple-500 outline-none transition"
-              placeholder="John Smith"
+              placeholder="Иван"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Фамилия
+            </label>
+            <input
+              id="lastName"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-purple-500 outline-none transition"
+              placeholder="Иванов"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="birthOfDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Дата рождения
+            </label>
+            <input
+              id="birthOfDate"
+              type="date"
+              value={birthOfDate}
+              onChange={(e) => setBirthOfDate(e.target.value)}
+              required
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-purple-500 outline-none transition"
             />
           </div>
 
@@ -144,12 +184,12 @@ export const Register = () => {
           </div>
 
           <button
-            onClick={handleGoogleSignIn}
+            onClick={handleGitHubSignIn}
             disabled={loading}
             className="mt-4 w-full flex items-center justify-center gap-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-500 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Chrome className="w-5 h-5" />
-            Google
+            GitHub
           </button>
         </div>
 

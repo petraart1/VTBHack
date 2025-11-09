@@ -3,7 +3,7 @@ FROM eclipse-temurin:21-jdk-alpine AS builder
 RUN apk add --no-cache bash
 
 WORKDIR /app
-ENV GRADLE_USER_HOME=/cache/gradle
+ENV GRADLE_USER_HOME=/cache/gradle-bank
 
 COPY gradlew ./
 COPY gradle gradle/
@@ -12,13 +12,13 @@ COPY build.gradle ./
 
 RUN chmod +x gradlew
 
-RUN --mount=type=cache,target=/cache/gradle \
-    ./gradlew dependencies --no-daemon
+RUN --mount=type=cache,target=/cache/gradle-bank \
+    ./gradlew dependencies --no-daemon --max-workers=1
 
 COPY src src/
 
-RUN --mount=type=cache,target=/cache/gradle \
-    ./gradlew bootJar -x test --no-daemon
+RUN --mount=type=cache,target=/cache/gradle-bank \
+    ./gradlew bootJar -x test --no-daemon --max-workers=1
 
 RUN java -Djarmode=layertools -jar build/libs/*.jar extract --destination extracted
 
