@@ -1,7 +1,7 @@
 spring:
   application:
     name: radarService
-    
+
   datasource:
     url: jdbc:postgresql://${RADAR_DB_CONTAINER_NAME}:${DB_PORT}/${POSTGRES_DB}
     username: ${POSTGRES_USER}

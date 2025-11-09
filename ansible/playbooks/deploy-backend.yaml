@@ -40,17 +40,7 @@
         - logs/auth
         - logs/bank
         - logs/radar
-    
-    - name: Stop and remove all containers
-      shell: |
-        cd {{ deploy_dir }}
-        docker compose down --timeout 30 --remove-orphans 2>/dev/null || true
-        docker system prune -f 2>/dev/null || true
-      become_user: "{{ deploy_user }}"
-      environment:
-        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
 
-      
     - name: Copy docker-compose.yml
       template:
         src: ../templates/docker-compose.prod.j2
@@ -75,7 +65,7 @@
       no_log: true
       changed_when: false
 
-    - name: Pull Docker images
+    - name: Pull Docker images for microservices
       shell: |
         docker pull {{ registry_url }}/{{ registry_prefix }}/{{ item }}:{{ hostvars[inventory_hostname][item + '_version'] }}
       become_user: "{{ deploy_user }}"
@@ -83,31 +73,22 @@
         - authservice
         - bankservice
         - radarservice
-      ignore_errors: yes
 
-    - name: Stop old containers
+    - name: Recreate only microservice containers (no DBs)
       shell: |
         cd {{ deploy_dir }}
-        docker compose down --timeout 30 2>/dev/null || true
+        docker compose up -d --no-deps --force-recreate --remove-orphans authservice bankservice radarservice
       become_user: "{{ deploy_user }}"
       environment:
         COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
-      ignore_errors: yes
+      register: recreate_result
 
-    - name: Start new containers
-      shell: |
-        cd {{ deploy_dir }}
-        docker compose up -d --remove-orphans --force-recreate
-      become_user: "{{ deploy_user }}"
-      environment:
-        COMPOSE_PROJECT_NAME: "{{ compose_project_name }}"
-      register: up_result
-
-    - name: Wait for services
+    - name: Wait for services to become healthy
       uri:
         url: "http://localhost:{{ item }}/actuator/health"
         method: GET
         status_code: 200
+      register: uri_result
       retries: 30
       delay: 2
       until: uri_result.status == 200
@@ -116,7 +97,6 @@
         - "{{ bank_port }}"
         - "{{ radar_port }}"
       ignore_errors: yes
-      register: uri_result
 
     - name: Get container status
       shell: "cd {{ deploy_dir }} && docker compose ps"
@@ -124,17 +104,18 @@
       register: container_status
       changed_when: false
 
-    - name: Display status
+    - name: Display container status
       debug:
         var: container_status.stdout_lines
 
   post_tasks:
-    - name: Success message
+    - name: Deployment summary
       debug:
         msg: |
           ✅ Deployment successful!
-          
-          Services:
-          - Auth: http://\{\{ ansible_host }}:{{ auth_port }}/actuator/health
-          - Bank: http://\{\{ ansible_host }}:{{ bank_port }}/actuator/health
-          - Radar: http://\{\{ ansible_host }}:{{ radar_port }}/actuator/health
+          Services are running internally (proxied by Nginx).
+
+          Internal endpoints:
+          - Auth: authservice:8080
+          - Bank: bankservice:8080
+          - Radar: radarservice:8080

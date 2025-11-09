@@ -80,8 +80,8 @@ services:
     image: {{ registry_url }}/{{ registry_prefix }}/authservice:{{ authservice_version }}
     restart: always
     container_name: {{ compose_project_name }}_auth
-    ports:
-      - "{{ auth_port }}:8080"
+    expose:
+      - "8080"
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}
@@ -108,8 +108,8 @@ services:
     image: {{ registry_url }}/{{ registry_prefix }}/bankservice:{{ bankservice_version }}
     restart: always
     container_name: {{ compose_project_name }}_bank
-    ports:
-      - "{{ bank_port }}:8081"
+    expose:
+      - "8080"
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}
@@ -142,8 +142,8 @@ services:
     image: {{ registry_url }}/{{ registry_prefix }}/radarservice:{{ radarservice_version }}
     restart: always
     container_name: {{ compose_project_name }}_radar
-    ports:
-      - "{{ radar_port }}:8082"
+    expose:
+      - "8080"
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}

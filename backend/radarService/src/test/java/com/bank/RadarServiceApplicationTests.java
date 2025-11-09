@@ -10,7 +10,7 @@ class RadarServiceApplicationTests {
 
     @Test
     void contextLoads() {
-        //
+        // Smoke test: проверяем что Spring контекст поднимается без ошибок
+        // Если jwt.secret не задан, тест упадет с PlaceholderResolutionException
     }
-
 }
