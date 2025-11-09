@@ -108,10 +108,10 @@ logging:
 # OpenAPI / Swagger configuration
 springdoc:
   api-docs:
-    path: /v3/api-docs
+    path: /radar/v3/api-docs
     enabled: true
   swagger-ui:
-    path: /swagger-ui.html
+    path: /radar/swagger-ui.html
     enabled: true
     tags-sorter: alpha
     operations-sorter: alpha

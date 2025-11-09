@@ -63,9 +63,9 @@ app:
 # OpenAPI (Swagger) конфигурация
 springdoc:
   api-docs:
-    path: /api-docs
+    path: /auth/api-docs
   swagger-ui:
-    path: /swagger-ui.html
+    path: /auth/swagger-ui.html
     enabled: true
     operations-sorter: method
     tags-sorter: alpha
